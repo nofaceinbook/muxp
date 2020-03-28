@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.1.0 exp
+# muxp_file.py    Version: 0.1.1 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -26,7 +26,7 @@ def readMuxpFile(filename, logname):
     log = getLogger(logname + "." + __name__) #logging based on pre-defined logname
     log.info("Reading muxp File: {}".format(filename))
     d = {} #dictionary returnig the read content
-    no_split_keys = ["xpfolder", "muxpfolder", "id", "description", "author"]
+    #no_split_keys = ["xpfolder", "muxpfolder", "id", "description", "author"]
     d["commands"] = [] #in this dictionary entry are commands listed
     if not path.isfile(filename):
         return None, "Error: File not existent!"
@@ -43,10 +43,10 @@ def readMuxpFile(filename, logname):
                 key = key.lstrip()
                 value = line[line.find(':')+2:]
                 value = value.lstrip()
-                if key not in no_split_keys:
-                    value = value.split() #each value is list of values that where sperated by blanks
-                    if len(value) == 1: #in case of single values
-                        value = value[0] #just use value and not set
+                #if key not in no_split_keys:
+                #    value = value.split() #each value is list of values that where sperated by blanks
+                #    if len(value) == 1: #in case of single values
+                #        value = value[0] #just use value and not set
                 if line_indent == 0: #we are on toplevel
                     if len(value) == 0: #if no value given, this is a mesh command
                         log.info("Entering new command: {}".format(key))
@@ -65,33 +65,194 @@ def readMuxpFile(filename, logname):
                         log.info("Read key inside command: {} assigned to: {} and indent: {}".format(key, value, line_indent))  
                         d["commands"][-1][key] = value
             if line.find('-') == 0: #we have now data list element which should belong to data set in command ---> error checks should be done as weel
-                list_elements = line[2:].split()
-                if len(list_elements) == 1:
-                    list_elements = list_elements[0]
-                new_datalist.append(list_elements)
-                log.info("Data-element: {}".format(list_elements))
+                #list_elements = line[2:].split()
+                #if len(list_elements) == 1:
+                #    list_elements = list_elements[0]
+                #new_datalist.append(list_elements)
+                #log.info("Data-element: {}".format(list_elements))
+                new_datalist.append(line[2:])
+                log.info("Data-element: {}".format(new_datalist[-1]))
     return d, None
 
-def validate_muxp(d):
+def validate_muxp(d, logname):
     """
     Validates values in read muxp dictionary d and turns them inside d to correc format
-    or returs error in case walues don't match.
+    or returs error in case walues don't match (first value is integer [negative error, positive warning], second error message)
     """
-    ### Validate muxp file version ###
-    if float(d["version"]) < 0.01: ### IMPORTANT: This is current version for muxp file
-        return "Error muxp file: version is too old."
+    SUPPORTED_MUXP_FILE_VERSION = 0.1
+
+    MUST_BASE_VALUES = ["muxp_version", "id", "area", "tile", "commands"] #These values must be all present in muxp files
     
-    ### Extract and validate area defined ###    
-    #d["area"] = d["area"].split()
+    OPTIONAL_BASE_VALUES = ["description", "author"] #only strings are allowed optional
+
+    MUST_COMMAND_PARAMETERS = {"cut_polygon" : ["coordinates"],
+                               "update_network_levels" : ["coordinates" , "road_coords_drapped"]}
+    
+    PARAMETER_TYPES = {"command" : ["string"],   #this is just command-type
+                       "_command_info" : ["string"],  #added below, includes full command including added info after '.' like cut_polygon.inner
+                       "name" : ["string"],
+                       "elevation" : ["float"]}
+    
+    OPTIONAL_PARAMETER_SETTING = {"elevation" : None, "name" : ""} #IF Parmeter is not given for command, the value in this dict is assigned
+    
+    LIST_TYPES = {"coordinates" : ["float", "float"],  #currently just float and int supported, everything else is string
+                  "3d_coordinates" : ["float", "float", "float"],
+                  "road_coords_drapped" : ["float", "float", "int"] }
+    
+    COORD_SWAPPING = ["coordinates", "3_coordinates", "road_coords_drapped"] #If parameter/list is included here coordinates from lon/lat will be swapped to x,y
+    
+    warnings = 0
+    errors = 0
+    skipped_commands = set() #set of indeces that will be skipped and thus removed from d["commands"]
+    
+    log = getLogger(logname + "." + __name__) #logging based on pre-defined logname
+    log.info("Validating muxp File")
+    
+    ### CHECK THAT ALL MUST BASE VALUES ARE READ
+    for mbv in MUST_BASE_VALUES:
+        if mbv not in d:
+            err  = "Must value {} missing in muxp-file.".format(mbv)
+            log.eror(err)
+            return -1, err
+    ### REPLACE OPTIONAL VALUES BY "" IF NOT PRESENT
+    for obv in OPTIONAL_BASE_VALUES:
+        if obv not in d:
+            d[obv] = ""
+    ### CONVERT AND CHECK BASE VALUES        
+    try:
+        muxp_version = float(d["muxp_version"])
+    except ValueError:
+        err = "muxp_version is not of type float"
+        log.error(err)
+        return -2, err
+    if muxp_version > SUPPORTED_MUXP_FILE_VERSION:
+        err = "muxp file version is {} but version {} is supported".format( d["muxp_version"], SUPPORTED_MUXP_FILE_VERSION)
+        log.warning(err)
+        return 1, err
+    ### Extract and validate tile defined
+    try:
+        longitude = int(d["tile"][:3])
+        latitude = int(d["tile"][3:])
+    except ValueError:
+        err = "Tile definition must be of form +xx+yyy (xx = longitude, yyy=latitude, + could also be -)"
+        log.error(err)
+        return -3, err
+    ### Extract and validate area defined 
+    d["area"] = d["area"].split() 
     for i in range(len(d["area"])):
         try:
             d["area"][i] = float(d["area"][i])
         except ValueError:
-            return "Error muxp file: area argument {} is not a float.".format(i+1)
+            err = "area argument {} is not a float.".format(i+1)
+            log.error(err)
+            return -4, err
+        if i < 2 and not longitude <  d["area"][i] < longitude + 1:
+            err = "area argument {} is outside defined tile definition for longitude".format(i+1)
+            log.error(err)
+            return -4, err
+        if i >= 2 and not latitude <  d["area"][i] < latitude + 1:
+            err = "area argument {} is outside defined tile definition for latitude".format(i+1)
+            log.error(err)
+            return -4, err        
     if i != 3:
-        return "Error muxp file: area has {} instead of 4 arguments.".format(i+1)
-    ################ TBD: Check that 4 floats really define coordinates for an area #########################
-    
+        err = "Error muxp file: area has {} instead of 4 arguments.".format(i+1)
+        log.error(err)
+        return -4, err
+    if not (0 <= d["area"][1] - d["area"][0] <= 1) or not (0 <= d["area"][3] - d["area"][2] <= 1):
+        err = "Area definiton not correct. Must be of form longitude_min, longitude_max, latitude_min, latidude_max and within 1x1 degree grid."
+        log.error(err)
+        return -4, err
+    ### VALIDATE AND EXTRACT COMMANDS
+    for i, c in enumerate(d["commands"]):
+        log.info("Validating Command {}: {}".format(i, c))
+        if c["command"].find(".") > 1: #Check if command has additional info attached with '." like cut_polygon.inner
+            d["commands"][i]["_command_info"] = d["commands"][i]["command"] #keep the full command name as additional info in dictionary for command with key "_command_info"
+            d["commands"][i]["command"] = d["commands"][i]["command"][:c["command"].find(".")] #cut command unil '.'
+            
+        if c["command"] not in MUST_COMMAND_PARAMETERS: #check if supported command 
+            log.warning("Command {}: {} NOT supported and skipped.".format(i, c["command"]))
+            warnings += 1
+            skipped_commands.add(i)
+            continue
+        for must in MUST_COMMAND_PARAMETERS[c["command"]]: #check if all must values are included
+            if must not in c:
+                log.error("Command {}: Must parameter {} missing, command {} skipped.".format(i, must, c["command"]))
+                errors += 1
+                skipped_commands.add(i)
+                break
+        for parameter in c:
+            log.info("    Validating Paramter {}".format(parameter))
+            if parameter in PARAMETER_TYPES:
+                d["commands"][i][parameter] = d["commands"][i][parameter].split()
+                if len(c[parameter]) < len(PARAMETER_TYPES[parameter]):
+                    log.error("Command {}: For parameter {} missing value, command {} skipped.".format(i+1, parameter, c["_command_info"]))
+                    errors += 1
+                    skipped_commands.add(i)
+                for t, val_type in enumerate(PARAMETER_TYPES[parameter]):
+                    if val_type == "float": 
+                        try:
+                            d["commands"][i][parameter][t] = float(c[parameter][t])
+                        except ValueError:
+                            log.error("Command {}: For {}. element of parameter {} wrong type (float would be required), command {} skipped.".format(i+1, t+1, parameter, c["_command_info"]))
+                            skipped_commands.add(i)
+                    if val_type == "int": 
+                        try:
+                            d["commands"][i][parameter][t] = int(c[parameter][t])
+                        except ValueError:
+                            log.error("Command {}: For {}. element of parameter {} wrong type (int would be required), command {} skipped.".format(i+1, t+1, parameter, c["_command_info"]))
+                            skipped_commands.add(i)
+                if len(d["commands"][i][parameter] ) == 1: ### If parameter has just one value, get rid of array
+                    d["commands"][i][parameter] = d["commands"][i][parameter][0]
+                if parameter in COORD_SWAPPING:
+                        d["commands"][i][parameter][0], d["commands"][i][parameter][1]  = d["commands"][i][parameter][1], d["commands"][i][parameter][0]
+            elif parameter in LIST_TYPES:
+                log.info("       Current parameter is a list ....")
+                for j, listline in enumerate(c[parameter]):
+                    d["commands"][i][parameter][j] = d["commands"][i][parameter][j].split()
+                    listline = listline.split()
+                    if len(listline) < len(LIST_TYPES[parameter]):
+                        log.error("Command {}: For list elements in line {} of list missing value, command {} skipped.".format(i+1, j+1, c["_command_info"]))
+                        errors += 1
+                        skipped_commands.add(i)
+                        continue #no further processing of list, as elements are missing
+                    for t, val_type in enumerate(LIST_TYPES[parameter]):
+                        if val_type == "float": 
+                            try:
+                                d["commands"][i][parameter][j][t] = float(listline[t])
+                            except ValueError:
+                                log.error("Command {}: For {}. element in line {} of list {} wrong type (float would be required), command {} skipped.".format(i+1, t+1, j+1, parameter, c["_command_info"]))
+                                skipped_commands.add(i)
+                        if val_type == "int":  
+                                try:
+                                    d["commands"][i][parameter][j][t] = int(listline[t])
+                                except ValueError:
+                                    log.info("     listline: {}".format(listline))
+                                    log.error("Command {}: For {}. element in line {} of list {} wrong type (int would be required), command {} skipped.".format(i+1, t+1, j+1, parameter, c["_command_info"]))
+                                    skipped_commands.add(i)
+                    if len(d["commands"][i][parameter][j]) == 1: ### If line of list has just one value, simplify array
+                        d["commands"][i][parameter][j] = d["commands"][i][parameter][j][0]
+                    if parameter in COORD_SWAPPING:
+                        d["commands"][i][parameter][j][0], d["commands"][i][parameter][j][1]  = d["commands"][i][parameter][j][1], d["commands"][i][parameter][j][0]
+            else:
+                log.warning("Command {}: Parameter/List {} unknown in command {}. Parameter is ignored.".format(i+1, parameter, c["_command_info"]))
+                warnings += 1
+                continue
+        for optpara in OPTIONAL_PARAMETER_SETTING: #If these optional parameters are not given with command, they are included with their default value
+            if optpara not in c:
+                c[optpara] = OPTIONAL_PARAMETER_SETTING[optpara]
+    skipped_commands = sorted(skipped_commands, reverse = True)
+    skipped_names = "" #names of commands sikipped
+    for skipped in skipped_commands:
+        skipped_names = skipped_names + d["commands"][skipped]["_command_info"]  +"\n"
+        d["commands"].pop(skipped)
+    if errors:
+        return -5, "MUXP file has {} errors and {} warnings.\nFollowing commands skipped:\n{}".format(errors, warnings, skipped_names)
+    elif warnings:
+        return 5, "MUXP file has {} warnings.\nFollowing commands skipped:\n{}".format(warnings, skipped_names)
+    else:
+        return 0, "MUXP file read without errors and warnings."
+                    
+    """    
     ### Extract and validate commands
     for i, c in enumerate(d["commands"]):
         if "coordinates" in c:
@@ -102,12 +263,9 @@ def validate_muxp(d):
             for j, coord in enumerate(c["3d_coordinates"]):
                 d["commands"][i]["3d_coordinates"][j] = [float(coord[1]), float(coord[0]), float(coord[2])] #swap from lon/lat to x,y
         if "elevation" in c:
-            d["commands"][i]["elevation"] = float(c["elevation"])
-        #### TBD: Extract further commands #########
-        
-    #### TBD: Check that each command also includeds required attributes like coords for cut_poly... #####
-    ########### ---> also include None values for non-existing values like for elevation in cut poly
-    
+            d["commands"][i]["elevation"] = float(c["elevation"])  
+    """
+
     return None  #No error               
     
  
