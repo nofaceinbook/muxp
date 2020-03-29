@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.1 exp"
+muxp_VERSION = "0.1.2 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -234,7 +234,7 @@ class muxpGUI:
             log.error("scenery_packs.ini missing in: {}".format(xpfolder + "/Custom Scenery"))
             info_label.config(text = "scenery_packs.ini missing in Custom Scenery")
             return -2        
-        if not path.exists(xpfolder + inicopy): #Copy current scenery ini if not backed up already
+        if not path.exists(inicopy): #Copy current scenery ini if not backed up already
             copy2(inifile ,inicopy)
             log.info("Backup of current scenery_packs.ini saved to: {}".format(inicopy))
         with open(inifile, encoding="utf8", errors="ignore") as f:
@@ -242,13 +242,17 @@ class muxpGUI:
             for line in f:
                 if line.startswith("SCENERY_PACK") and not folder_inserted:
                     scenery = line[line.find(" ")+1:]
-                    if scenery > "Custom Scenery/zMUXP mesh updates":
+                    #log.info("Compare {} with {}".format(scenery, muxp_scenery+'/'))
+                    if scenery == muxp_scenery+'/\n': # '/\n' always in .ini at end of folder
+                        log.info("   muxp-folder '{}' for updated dsf-files already in scenery_packs.ini".format(scenery))
+                        folder_inserted = True
+                    elif scenery > muxp_scenery:  
                         log.info("   Include muxp-folder for updated dsf-files in scenery_packs.ini before: {}".format(scenery))
-                        new_infile.append("SCENERY_PACK Custom Scenery/zMUXP mesh updates\n")
+                        new_infile.append("SCENERY_PACK {}/\n".format(muxp_scenery)) # '/' required in ini to be a correct path
                         folder_inserted = True
                 new_infile.append(line)
             if not folder_inserted:
-                new_infile.append("SCENERY_PACK Custom Scenery/zMUXP mesh updates\n")
+                new_infile.append("SCENERY_PACK {}/\n".format(muxp_scenery)) # '/' required in ini to be a correct path
                 log.info("   Added muxpfolder for updated dsf-files at end of scenery_packs.ini.")
         with open(inifile, "w", encoding="utf8", errors="ignore") as f:
             for line in new_infile:
@@ -395,12 +399,17 @@ class muxpGUI:
         a.insertMeshArea()
         if "muxp/HashDSFbaseFile" not in self.dsf.Properties: #store the file hash of the base dsf file 
             self.dsf.Properties["muxp/HashDSFbaseFile"] = str(self.dsf.FileHash)
-        this_muxp_property = "muxp/" + update["id"] + "/"
-        self.dsf.Properties[this_muxp_property + "version"] = update["version"]
-        self.dsf.Properties[this_muxp_property + "author"] = update["author"]
-        self.dsf.Properties[this_muxp_property + "area"] = "{} {} {} {}".format(update["area"][0], update["area"][1], update["area"][2], update["area"][3])
-        self.dsf.Properties[this_muxp_property + "time"] = str(int(time()))
-        log.info(self.dsf.Properties)
+            #### OPTION: write hex-presentation instead binary string to dsf with binascii.b2a_hex ###
+        update_number = 0 
+        for props in self.dsf.Properties: #check for alread included updates in dsf and find highest number
+            if props.startswith("muxp/update/"):
+                update_number_read = int(props[12:])
+                if update_number_read > update_number:
+                    update_number = update_number_read
+        update_prop_key = "muxp/update/{}".format(str(update_number + 1)) #next number for new update, start with 1
+        #For each update dsf will include property key 'muxp/update/number' with value 'update_id/update_version/updated_area'
+        self.dsf.Properties[update_prop_key] = "{}/{}/{} {} {} {}".format(update["id"],update["version"], update["area"][0], update["area"][1], update["area"][2], update["area"][3])
+        log.info("Updated dsf.Properties: {}".format(self.dsf.Properties))
         self.current_action = "write"
         #Check that all required folders for writing updated dsf do exist and create if missing
         if not path.exists(self.muxpfolder):
