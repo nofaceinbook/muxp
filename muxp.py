@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.2 exp"
+muxp_VERSION = "0.1.3 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -35,7 +35,6 @@ from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
 from glob import glob #### NEEDED LATER TO SEARCH FOR DSF FILE ALSO IN Custom Scenery Folder
 from sys import argv
-from time import time #currently needed to include creation time in dsf file
 
 
 def displayHelp(win):
@@ -338,6 +337,7 @@ class muxpGUI:
         self.dsf.read(filename)
         a = muxpArea(self.dsf, LogName)
         a.extractMeshArea(*update["area"])
+        elevation_scale = 1 ### IMPORTANT: When command set sub-meter vertices this scale has to be adapted
         
         areabound = [(update["area"][2],update["area"][0]), (update["area"][2],update["area"][1]), (update["area"][3],update["area"][1]),
                      (update["area"][3],update["area"][0]), (update["area"][2],update["area"][0]) ]
@@ -395,7 +395,124 @@ class muxpGUI:
                 if self.kmlExport:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
                     
-        a.createDSFVertices()
+            if c["command"] == "cut_flat_terrain_in_mesh":
+                polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
+                ########### TBD: CutPoly should not change elevation, so it would not needed to give parameter None !!! ############
+                for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
+                    vertex[2] = c["elevation"]
+                ### NOTE: even if only elevation for terrain is set, the new changed trias will create different looking terrain also outside terrain mesh
+                a.createPolyTerrain(c["coordinates"], c["terrain"], c["elevation"])
+                for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
+                    a.splitCloseEdges(vertex)
+                shown_polys = polysouter
+                for pol in shown_polys:
+                    pol.append(pol[0])  #polys are returned without last vertex beeing same as first
+                shown_polys.append(c["coordinates"]) 
+                if self.kmlExport:
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    
+            if c["command"] == "cut_spline_segment":
+                log.info("Cuting segement as spline for following eleveation profile: {} m".format(c["3d_coordinates"]))
+                segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"]) #box around first and last vertex with width
+                segment_interval_bound = [] #bound including also vertices for interval steps
+                for corner1, corner2 in [[1,2], [3,0]]:
+                    interval_steps = int(distance(segment_bound[corner1], segment_bound[corner2]) /  c["profile_interval"]) + 1
+                    interval_vector = [(segment_bound[corner2][0] - segment_bound[corner1][0]) / interval_steps, (segment_bound[corner2][1] - segment_bound[corner1][1]) / interval_steps]
+                    segment_interval_bound.append(segment_bound[corner1-1]) #TBD: Do quicker with extend both values ???
+                    segment_interval_bound.append(segment_bound[corner1])
+                    for i in range(1,interval_steps): #first and last step not needed as these are corners of segment_bound
+                        segment_interval_bound.append([segment_bound[corner1][0] + i * interval_vector[0],  segment_bound[corner1][1] + i * interval_vector[1]])
+                segment_interval_bound.append(segment_interval_bound[0]) #add first coordinate to get closed poly
+                polysouter, polysinner, borderv = a.CutPoly(segment_interval_bound, None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
+                a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0) #for first step take default elevation -32768 for raster, will be changed below #### OPEN: earlip seems to work nicely, always ??? ##############
+                #log.info("BORDER VERTICES: {}".format(borderv))
+                #split_trias = [] ## SPLIT TRIAS JUST FOR TESTING --> TO BE REMOVED
+                for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
+                    new_split = a.splitCloseEdges(vertex)   #### assigning split trias is just for testing --> Just call splitCloseEdges; remove split_trias; also definition above !!!! ##################
+                #    if len(new_split) > 0: split_trias.extend(new_split)  ### to be removed after testing ###
+                xp, yp = [], [] #points for spline to be created
+                for p in c["3d_coordinates"]:
+                    xp.append(distance(c["3d_coordinates"][0][:2], p[:2]))
+                    yp.append(p[2])
+                log.info("Points for spline: {}, {}".format(xp, yp))
+                spline = getspline(xp, yp)
+                log.info("Spline: {}".format(spline))
+                for vertex in a.getAllVerticesForCoords(segment_interval_bound): #set vertices of intervals to correct elevation
+                    elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)
+                    vertex[2] = elev                
+                for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
+                    elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)
+                    vertex[2] = elev
+                elevation_scale = 0.05 #allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
+                shown_polys = polysouter
+                for pol in shown_polys:
+                    pol.append(pol[0])  #polys are returned without last vertex beeing same as first
+                #shown_polys = [] ####### THIS IS JUST FOR CHECKING WHERE SPLIT TRIAS ARE: TO BE REMOVED ############
+                #log.info("SPLIT TRIAS: {}".format(split_trias))
+                #for t in split_trias:
+                #    pol = []
+                #    log.info("current t: {}".format(t))
+                #    for e in range(3):
+                #        pol.append(t[e][:2])
+                #    pol.append(pol[0]) #closed poly
+                #    shown_polys.append(pol)
+                shown_polys.append(segment_bound) 
+                if self.kmlExport:
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                ######### MAKE SURE THAT VERTICES ARE CREATED ON 5CM OPTION !!!!! ####################
+                
+                    
+            if c["command"] == "limit_edges":
+                a.limitEdges(c["coordinates"], c["edge_limit"])
+                log.info("Edges in area have been limited")
+                if self.kmlExport:
+                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_cmd_{}".format(c_index))
+            
+            if c["command"] == "update_raster_elevation":
+                log.info("CHANGING FOLLOWING RASTER SQUARES TO ELEVATION OF: {} m".format(c["elevation"]))
+                raster_bounds = [c["coordinates"]] #include boundary for raster selection
+                for raster_index, raster_corners, raster_center in a.rasterSquares(*BoundingRectangle(c["coordinates"])):
+                    include_square = False
+                    if c["include_raster_square_criteria"] == "center_inside":
+                        if PointInPoly(raster_center, c["coordinates"]): include_square = True
+                    elif c["include_raster_square_criteria"] == "square_cuts_poly":
+                        log.error("Cut ruster square with poly not yet supported!!!!")  ########## TBD ###############
+                    else: #Default case is just one or more corner(s) is/are in square
+                        for corner in raster_corners:
+                            if PointInPoly(corner, c["coordinates"]): include_square = True
+                    if include_square:    
+                        log.info("CHANGE RASTER SQUARE {}: {} and center {} to elevation of {}m".format(raster_index, raster_corners, raster_center, c["elevation"])) 
+                        raster_corners.append(raster_corners[0]) #make squre to closed poly
+                        raster_bounds.append(raster_corners)
+                        self.dsf.Raster[0].data[raster_index[0]][raster_index[1]] = c["elevation"]
+                if self.kmlExport:
+                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    
+            if c["command"] == "update_raster4spline_segment":
+                log.info("CHANGING FOLLOWING RASTER SQUARES on segement for following eleveation profile: {} m".format(c["3d_coordinates"]))
+                segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"]) #box around first and last vertex with width
+                raster_bounds = [segment_bound] #include boundary for raster selection
+                xp, yp = [], [] #points for spline to be created
+                for p in c["3d_coordinates"]:
+                    xp.append(distance(c["3d_coordinates"][0][:2], p[:2]))
+                    yp.append(p[2])
+                log.info("Points for spline: {}, {}".format(xp, yp))
+                spline = getspline(xp, yp)
+                log.info("Spline: {}".format(spline))
+                for raster_index, raster_corners, raster_center in a.rasterSquares(*BoundingRectangle(segment_bound)):
+                    for corner in raster_corners:
+                        if PointInPoly(corner, segment_bound):
+                            raster_corners.append(raster_corners[0]) #make squre to closed poly
+                            raster_bounds.append(raster_corners)
+                            elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], raster_center, spline)
+                            self.dsf.Raster[0].data[raster_index[0]][raster_index[1]] = round(elev)
+                            log.info("Set raster {} to elevation: {}m".format(raster_index, round(elev)))
+                            break
+                if self.kmlExport:
+                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_cmd_{}".format(c_index))                        
+
+        log.info("DSF vertices created with scaling: {}".format(elevation_scale))            
+        a.createDSFVertices(elevation_scale)
         a.insertMeshArea()
         if "muxp/HashDSFbaseFile" not in self.dsf.Properties: #store the file hash of the base dsf file 
             self.dsf.Properties["muxp/HashDSFbaseFile"] = str(self.dsf.FileHash)
