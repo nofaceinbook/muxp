@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.1.1 exp
+# muxp_file.py    Version: 0.1.3 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -86,14 +86,26 @@ def validate_muxp(d, logname):
     OPTIONAL_BASE_VALUES = ["description", "author"] #only strings are allowed optional
 
     MUST_COMMAND_PARAMETERS = {"cut_polygon" : ["coordinates"],
-                               "update_network_levels" : ["coordinates" , "road_coords_drapped"]}
+                               "cut_flat_terrain_in_mesh" : ["coordinates", "terrain", "elevation"],
+                               "cut_spline_segment" : ["3d_coordinates", "terrain", "width", "profile_interval"],
+                               "update_network_levels" : ["coordinates" , "road_coords_drapped"],
+                               "limit_edges" : ["coordinates", "edge_limit"],
+                               "update_raster_elevation" : ["coordinates", "elevation"],
+                               "update_raster4spline_segment" : ["3d_coordinates", "width"] }
     
     PARAMETER_TYPES = {"command" : ["string"],   #this is just command-type
                        "_command_info" : ["string"],  #added below, includes full command including added info after '.' like cut_polygon.inner
                        "name" : ["string"],
-                       "elevation" : ["float"]}
+                       "terrain" : ["string"],
+                       "elevation" : ["float"],
+                       "include_raster_square_criteria" : ["string"],
+                       "edge_limit" : ["int"],
+                       "profile_interval" : ["float"],
+                       "width" : ["float"]}
     
-    OPTIONAL_PARAMETER_SETTING = {"elevation" : None, "name" : ""} #IF Parmeter is not given for command, the value in this dict is assigned
+    OPTIONAL_PARAMETER_SETTING = {"elevation" : None,
+                                  "name" : "",
+                                  "include_raster_square_criteria" : "corner_inside"} #IF Parmeter is not given for command, the value in this dict is assigned
     
     LIST_TYPES = {"coordinates" : ["float", "float"],  #currently just float and int supported, everything else is string
                   "3d_coordinates" : ["float", "float", "float"],
@@ -168,6 +180,8 @@ def validate_muxp(d, logname):
         if c["command"].find(".") > 1: #Check if command has additional info attached with '." like cut_polygon.inner
             d["commands"][i]["_command_info"] = d["commands"][i]["command"] #keep the full command name as additional info in dictionary for command with key "_command_info"
             d["commands"][i]["command"] = d["commands"][i]["command"][:c["command"].find(".")] #cut command unil '.'
+        else:
+            d["commands"][i]["_command_info"] = c["command"] #set _command_info to just command name in order that info can be shown e.g. for errors
             
         if c["command"] not in MUST_COMMAND_PARAMETERS: #check if supported command 
             log.warning("Command {}: {} NOT supported and skipped.".format(i, c["command"]))
