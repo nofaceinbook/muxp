@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.1.0 exp
+# muxp_area.py    Version: 0.1.3 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -22,6 +22,7 @@
 #
 #******************************************************************************
 
+from xplnedsf2 import *
 from logging import getLogger
 from muxp_math import *
 from copy import deepcopy
@@ -73,11 +74,31 @@ class muxpArea:
         self.log.info("  ... dsf has {} trias and {} trias from {} different patches are now in the extracted area.".format(triaCount, len(self.atrias), len(self.apatches)))
         return
     
+    
+    def insertMeshArea(self):
+        """
+        Insert mesh area in dsf again from which it was extracted.
+        Important: The shape of extraction must still be the same. Also no new vertices on borders are allowed.
+                   Changes are only allowed inside the area.
+        """
+        patchTrias = {} #dictionary that stores for each patch the list of trias that are in the area in this patch
+        for t in self.atrias:
+            if t[6] in patchTrias:
+                patchTrias[t[6]].append([t[3], t[4], t[5]])
+            else:
+                patchTrias[t[6]] = [ [t[3], t[4], t[5]] ]
+        for p in patchTrias:
+            self.log.info("For patch no. {} trias will be added: {}".format(p, patchTrias[p]))
+            dsftrias = self.dsf.Patches[p].triangles()
+            dsftrias.extend(patchTrias[p])
+            self.dsf.Patches[p].trias2cmds(dsftrias)
+
+
     def getAllVerticesForCoords(self, coords):
         """
         Returns all vertices that have same lon/lat coordinates as given in list of coords (list of [x,y])
         """
-        self.log.info("Searching vertices for coords: {}")
+        self.log.info("Searching vertices for coords: {}".format(coords))
         cdict = {}  #set up dictonary with all coords o to find additional in area with same coords
         vertices = [] #list of vertices 
         for c in coords:
@@ -153,7 +174,7 @@ class muxpArea:
         part1.reverse()
         ### Now check which part is outer and inner:
         ## The following line assumes that c[i] to c[i+1] is still the butting line of p where cutting polygon exits p
-        if ((c[i+1][0] - c[i][0]) * (p[exit_segment][1] - c[i][1]) - (c[i+1][1] - c[i][1]) * (p[exit_segment][0] - c[i][0])) < 0: #first point of exit segment of p lies on outer side in case of clockwise going through p
+        if ((c[i+1][0] - c[i][0]) * (p[exit_segment][1] - c[i][1]) - (c[i+1][1] - c[i][1]) * (p[exit_segment][0] - c[i][0])) > 0: #first point of exit segment of p lies on outer side in case of clockwise going through p
             outer = part1
             inner = part2
         else:
@@ -177,14 +198,16 @@ class muxpArea:
         return outer1, inner1, border_v
 
 
-    def CutPoly(self, p, elev=None):
-        #### TBD: Make sure p is ordered clockwise !!!! ##############################
+    def CutPoly(self, p, elev=None, keepInnerTrias=True):
         outer = []
         inner = []
         border = []
         new_trias = []
         old_trias = []
         self.log.info("Cutting Polygon p into area, retrieving inner and outer sub-polygons.")
+        if not is_clockwise(p):
+            self.log.warning("Polygon is not clockwise --> it is reversed!!!")
+            p.reverse()
         for t in self.atrias: #go through all trias in area
             tria = [t[0][0:2], t[1][0:2], t[2][0:2]]
             
@@ -204,26 +227,29 @@ class muxpArea:
                         inside_tria[tv][2] = elev
                     new_trias.append(inside_tria)
                     self.log.info("Adapted elevation in inside tria. New Tria: {}".format(inside_tria))
+                    
+            if keepInnerTrias: # In case inside p will get new mesh later, we leave inner trias away
+                for poly in i: # otherwise we will now triangulate inner polygosn with earclip    #### ERROR CHECKING ONLY ######
+                    if len(earclip(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
+                    for tria in earclip(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
+                        if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
+                        new_v = [None, None, None]
+                        for e in range(3):
+                            new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
+                            ############# TBD: Elevation change probably not required here, because it will always be set via border vertices later ?!? ==> NO!! See inner trias above! #########################
+                            if elev != None: ### actually only for inner + border_v !!!!!!!!!!!!!!!!! ### 
+                                new_v[e][2] = elev
+                        new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
 
-            for poly in i: ### In case p has own mesh, than only earclip outer trias, but insert border vertices into mesh and delete inner trias without cut  #### ERROR CHECKING ONLY ######
+            for poly in o: #outer polys have always to be earclipped, but no elevation/terrian change 
                 if len(earclip(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
                 for tria in earclip(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
                     if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
                     new_v = [None, None, None]
                     for e in range(3):
                         new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
-                        if elev != None: ### actually only for inner + border_v !!!!!!!!!!!!!!!!! ### 
-                            new_v[e][2] = elev
                     new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
-
-            for poly in o: #out polys have always to be earclipped, but no elevation/terrian change 
-                if len(earclip(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
-                for tria in earclip(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
-                    if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
-                    new_v = [None, None, None]
-                    for e in range(3):
-                        new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
-                    new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
+                    self.log.info("+++ TRIA IN OUTER POLY APPENDED: {}".format(new_trias[-1])) ######## LOG JUST FOR TESTING, TO BE REMOVED ###########
                      
             if b != []: #we have border vertices, so there was a cut in this tria
                 old_trias.append(t) #so this tria is replaced by trias of inner and outer polys
@@ -237,9 +263,18 @@ class muxpArea:
             except ValueError:
                 self.log.info("   was already removed...")
         
+        ########### TBD: Better set elevation outside, to also distinguish there for profile elevation ... #######################
         if elev != None: #Adapt elevevation of border vertices 
             for v in self.getAllVerticesForCoords(border):
                 v[2] = elev
+                
+        #eliminate double border vertices   ##### OPEN: use set in complete function instead of list for border vertices? ################
+        borderSet = set()  #set with all coords of border vertices in order to eliminate dolubles 
+        for v in border:
+            borderSet.add((round(v[0], 7), round(v[1], 7)))  # coords round to range of cm
+        border = [] #now only take border vertices one time in list
+        for v in borderSet:
+            border.append(v)
                 
         return outer, inner, border
                 
@@ -350,6 +385,9 @@ class muxpArea:
 
     
     def limitEdges(self, poly, limit):
+        ############### PROBLEM: If tria on one side of the edge uses raster and the one of the other side is using pre-defined elevation
+        ######################### then they will in X-Plane not be on the same level ---> Make sure that new vertex on split edge
+        ######################### has same elevation in both trias ----> Solve when creating dsf vertices with different elelvation....
         """
         Limits the length of the edges poly to limit in meter.
         """
@@ -433,8 +471,9 @@ class muxpArea:
                 if len(t[vt]) != count: #the reference for this vertex to the pool is not correct any more, new vertex needs to be inserted in dsf
                     v = deepcopy(t[vt]) #v has now deepcopy of all coordinates of that vertex that is to be inserted in the dsf
                     poolID4v = None #Searching for the pool ID for vertex v
-                    if elevscal < 1 and v[2] < -32765: #we want to get submeter elevations but have vertex referencing raster
-                        v[2] = self.dsf.getVertexElevation(v[0], v[1], v[2]) #make sure that v[2] is real elevation and not using raster (with raster no submeter); only works because raster is there
+                    #################### NEW 05.04.2020 commented two lines below; submeter elevation is only used for vertices assigned elevation; all ohters could stay with raster elevation ##############
+                    #if elevscal < 1 and v[2] < -32765: #we want to get submeter elevations but have vertex referencing raster
+                    #    v[2] = self.dsf.getVertexElevation(v[0], v[1], v[2]) #make sure that v[2] is real elevation and not using raster (with raster no submeter); only works because raster is there
                     for i in newPools:
                         if len(v) == len(self.dsf.Scalings[i]): #does size of scaling vector / number of planes for pool fit
                             counter = 0
@@ -448,19 +487,32 @@ class muxpArea:
                                 break
                     if poolID4v != None: #existing pool was found
                         matchfound = False
-                        for ev in self.dsf.V[poolID4v]: #check for all existing vertices ev if they match v already
+                        for ev_index, ev in enumerate(self.dsf.V[poolID4v]): #check for all existing vertices ev if they match v already ########### NEW 31.3.2020 enumerate #######
                             counter = 0
                             for i in range(len(v)): #check for all planes/coordinates whether they are nearly equal
                                 if abs(ev[i] - v[i]) >= self.dsf.Scalings[poolID4v][i][0] / 65535: #if difference is lower than scale multiplier both coordinates would end up same after endcoding, so they match
                                     break
                                 counter +=1
-                            if len(v) == counter: #matching vertex found
-                                t[vt+3] = [poolID4v, self.dsf.V[poolID4v].index(ev)]
+                            if counter == 2: ###################### NEW 31.03.2020 in order to handle issue for limit edges on raster and set elev. trias ###########
+                                self.log.warning("  Vertex {} is at same location as {} but different elevations!!".format(v, ev))
+                                ### We want on each coordinate same elevation, so let's adapt the lower elevated one to the higher (to avoid staying with unpredictable raster value for default -32768)
+                                if ev[2] < v[2]:
+                                    self.dsf.V[poolID4v][ev_index][2] = v[2] #adapt lower existing vertex elevation with elevation of higher new vertex
+                                else:
+                                    v[2] = ev[2] #adapt lower new vertex with elevation of existing higher one
+                                self.log.info("      Now new vertex has elevation {}m and existing {}m.".format(v[2], self.dsf.V[poolID4v][ev_index][2]))
+                                ### We also need to continue check if same vertex can be used or new vertex has to be created because of different higher coordinates
+                                for i in range(3,len(v)): #check for all planes/coordinates whether they are nearly equal
+                                    if abs(ev[i] - v[i]) >= self.dsf.Scalings[poolID4v][i][0] / 65535: #if difference is lower than scale multiplier both coordinates would end up same after endcoding, so they match
+                                        break
+                                    counter +=1                       
+                            if counter == len(v): #matching vertex found          #### NEW 31.03.2020: was before first if case ####
+                                t[vt+3] = [poolID4v, ev_index]  #### NEW 31.03.2020  was before set to [poolID4v, self.dsf.V[poolID4v].index(ev)]
                                 self.log.info("  Vertex {} equals vertex {} in existing Pool with index {} .".format(v, ev, poolID4v))
                                 matchfound = True
                                 break
-                            if counter >= 2:
-                                self.log.warning("  Vertex {} is at same location as {} but different higher coordinate {}!!".format(v, ev, counter))
+                            if counter > 2: ##### NEW 31.03.2020: was >=, but == handled above #########
+                                self.log.info("  Vertex {} is at same location as {} but different higher coordinate {}!!".format(v, ev, counter))
                         if not matchfound:       
                             self.dsf.V[poolID4v].append(v)
                             t[vt+3] = [poolID4v, len(self.dsf.V[poolID4v])-1] #change reference in area tria vertex to the last vertex in existing pool
@@ -481,10 +533,12 @@ class muxpArea:
                             scale_checked = True #assume test will passed, will be set False if on check does not pass
                             for j in range(len(v)): #check for each plane j if v could fit between minimum and maximum reach of scale
                                 if v[j] < self.dsf.Scalings[-1][j][1]: #v at plane j is lower than scaling allows
+                                    self.log.info("  Vertex in plane {} has value {} and thus lower than allowed scaling minimum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1]))
                                     self.dsf.Scalings[-1][j][1] -= self.dsf.Scalings[-1][j][0] #subtract one scalefactor from base
                                     scale_checked = False #check if new scaling fits
                                     self.log.warning("  Vertex {} does not fit to scaling. Reduced scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
                                 if v[j] > self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]: #v at plane j is higher than scaling allows
+                                    self.log.info("  Vertex in plane {} has value {} and thus higher than allowed scaling maximum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
                                     self.dsf.Scalings[-1][j][1] += self.dsf.Scalings[-1][j][0] #add one scalefactor to base
                                     scale_checked = False #check if new scaling fits
                                     self.log.warning("  Vertex {} does not fit to scaling. Increased scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
@@ -495,24 +549,124 @@ class muxpArea:
                 else:
                     self.log.info("Vertex {} unchanged. Index to pool {} reused.".format(t[vt], t[vt+3][0]))
         return 0
-    
-    def insertMeshArea(self):
+
+    def rasterSquares(self, latS, latN, lonW, lonE):
         """
-        Insert mesh area in dsf again from which it was extracted.
-        Important: The shape of extraction must still be the same. Also no new vertices on borders are allowed.
-                   Changes are only allowed inside the area.
+        Yields for a bounding rectangle with latS, latN, lonW, lonE all squares of raster
+        that are inside or intersecting bounding rectangle.
+        For each square [x, y] indeces to dsf.Raster[0] (assumed that elevation raster is lowest layer)
+        and [[x1,y1], [x2,y2], [x3,y3], [x4, y4]] corner coordinates of square and [cx,cy] the coordinates
+        of the center of the square.
         """
-        patchTrias = {} #dictionary that stores for each patch the list of trias that are in the area in this patch
-        for t in self.atrias:
-            if t[6] in patchTrias:
-                patchTrias[t[6]].append([t[3], t[4], t[5]])
-            else:
-                patchTrias[t[6]] = [ [t[3], t[4], t[5]] ]
-        for p in patchTrias:
-            self.log.info("For patch no. {} trias will be added: {}".format(p, patchTrias[p]))
-            dsftrias = self.dsf.Patches[p].triangles()
-            dsftrias.extend(patchTrias[p])
-            self.dsf.Patches[p].trias2cmds(dsftrias)
+        #### Get index for raster pixel SW (yS, xW) for area to be exported
+        xW = abs(lonW - int(self.dsf.Properties["sim/west"])) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yS = abs(latS - int(self.dsf.Properties["sim/south"])) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        if self.dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
+            xW = round(xW, 0)
+            yS = round(yS, 0)
+        xW = int(xW) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
+        yS = int(yS) 
+        
+        #### Get index for raster pixel NE (yN, xE) for area to be exported
+        xE = abs(lonE - int(self.dsf.Properties["sim/west"])) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yN = abs(latN - int(self.dsf.Properties["sim/south"])) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        Rcentricity = "point-centric"
+        if self.dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
+            xE = round(xE, 0)
+            yN = round(yN, 0)
+            Rcentricity = "post-centric"
+        xE = int(xE) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
+        yN = int(yN)
+        
+        #### Define relevant info for raster to be used later ####
+        Rwidth = self.dsf.Raster[0].width
+        xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
+        xbase = int(self.dsf.Properties["sim/west"])
+        Rheight = self.dsf.Raster[0].height
+        ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
+        ybase = int(self.dsf.Properties["sim/south"])
+        if Rcentricity == "post-centric": #if post-centricity we have to move dem pixel half width/hight to left/down in order to get pixel center on border of dsf tile
+            cx = 0.5 * xstep 
+            cy = 0.5 * ystep
+        else:
+            cx = 0
+            cy = 0
+        for x in range(xW, xE+1):
+            for y in range (yS, yN+1):
+                indices = [x, y]
+                corners = [ [xbase + x*xstep - cx, ybase + y*ystep - cy],
+                            [xbase + x*xstep - cx, ybase + (y+1)*ystep - cy],
+                            [xbase + (x+1)*xstep - cx, ybase + (y+1)*ystep - cy],
+                            [xbase + (x+1)*xstep - cx, ybase + y*ystep - cy]      ]
+                center = [xbase + (x+0.5)*xstep - cx, ybase + (y+0.5)*ystep - cy]
+                yield indices, corners, center
+
                 
+    def getPatchID(self, terrain, flag=1, near=0.0, far=-1.0):
+        """
+        Returns PatchID for a patch with given terrain, flag, near/far values.
+        Creates a new patch if no such patch is existent.
+        ###### TBD: Really search for such a patch. This version only creates new patches!!! ###########
+        """
+        terrain_id = 0 #find terrain id for new patch that includes trias for runway
+        self.log.info("Current Terrain Definitons in dsf: {}".format(self.dsf.DefTerrains))
+        while terrain_id < len(self.dsf.DefTerrains) and self.dsf.DefTerrains[terrain_id] != terrain:
+            terrain_id += 1
+        if terrain_id == len(self.dsf.DefTerrains):
+            self.log.info("Terrain {} for runway profile not in current list. Will be added with id {}!".format(terrain, terrain_id))
+            self.dsf.DefTerrains[terrain_id] = terrain
+        else:
+            self.log.info("Terrain {} for runway profile found in current list with id: {}.".format(self.dsf.DefTerrains[terrain_id], terrain_id))
+        newPatch = XPLNEpatch(1, 0.0, -1.0, None, terrain_id) #None is PoolIndex which is not known yet ############ TBD: PoolIndix in generator for Patch not required --> to be reomved !!! #################
+        ##### IMPORTANT: the first command for the pool has still to be set as selection of poolID for first tria
+        self.dsf.Patches.append(newPatch)
+        return len(self.dsf.Patches)-1 #Index of the new patch is now the last just added
+        
+    def createPolyTerrain(self, poly, terrain, elev):
+        """
+        Creates trias of given terrain inside the poly.
+        Poly is expected to be closed (first = last vertex)
+        """
+        patchID = self.getPatchID(terrain) ### WARNING: This new patch has still no poolDefintion in first Command!!!!!
 
-
+        if len(earclip(deepcopy(poly[:-1]))) < len(poly) - 3: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
+        for tria in earclip(deepcopy(poly[:-1])): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
+            if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
+            new_v = [None, None, None]
+            for e in range(3):
+                new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0] #This version only creates simple vertices without s/t coordinates
+                #new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)  ## TBD: support s/t vertices via a given tria t that has maximum s/t coords at endpoint
+                ############# TBD: Elevation change probably not required here, because it will always be set via border vertices later ?!? #########################
+            self.atrias.append([new_v[0], new_v[1], new_v[2], [-1, -1], [-1, -1], [-1, -1], patchID])  #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
+            
+    def splitCloseEdges(self, v, mindist=0.1):
+        """
+        Checks for a vertex v if it lies on/next to edges of trias.
+        If this is the case according edges (trias) are split at v.
+        Minimal distance is in meter. When v is closer than mindist
+        to edge vertex or further away from edge, the edge is not split.
+        """
+        self.log.info("Checking if close edge for vertex {} is found.".format(v))
+        new_trias = []
+        old_trias = []
+        for t in self.atrias:
+            for e in range(3):
+                e_part, o_part, dist = edgeDistance(v, t[e][:2], t[(e+1)%3][:2])
+                if e_part > 0 and e_part < 1: #v must be between two vertices of edge
+                    if distance(v, t[e][:2]) > mindist and distance(v, t[(e+1)%3][:2]) > mindist: #v must not be too close to tria edge vertices
+                        if abs(dist) < mindist:
+                            self.log.info("   Close edge from {} to {} with distance {} found and splitted (e-part: {}).".format(t[e], t[(e+1)%3], dist, e_part))
+                            new_v = createFullCoords(v[0], v[1], t) #use v now as point of both new trias
+                            new_trias.append([ t[e], new_v, t[(e+2)%3], t[3], t[4], t[5], t[6]])
+                            new_trias.append([ new_v, t[(e+1)%3], t[(e+2)%3], t[3], t[4], t[5], t[6]])
+                            old_trias.append(t)
+        for nt in new_trias:
+            self.log.info("   Tria appended: {}".format(nt))
+            self.atrias.append(nt) #update area trias by appending new trias
+        for ot in old_trias:
+            self.log.info("   Tria removed: {}".format(ot))
+            if ot[0][2] > 0 or ot[1][2] > 0 or ot[2][2] > 0: ########## ERROR CHECKING ---> TO BE REMOVED ###############
+                self.log.error("          REMOVED TRIA ABOVE ALREADY HAVING ELEVATION")
+            if ot in self.atrias: ###### NEW 05.04.2020 ############## WHY REQUIRED after setting relative_mindist from 0.001 to 0.00001??? NOW STILL REQUIRE ??? ############
+                self.atrias.remove(ot) #update area trias by by removing trias that are replaced by new ones
+        return new_trias #### JUST FOR TESTING ######## TO BE REMOVED !!! ###################
