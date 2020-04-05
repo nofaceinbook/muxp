@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.0.3 exp
+# muxp_math.py   Version: 0.1.3 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -47,6 +47,14 @@ def distance(p1, p2): #calculates distance between p1 and p2 in meteres where p 
     a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))   
     return R * c
+
+def edgeDistance(p, a, b): #calculates distance of point p to edge e from a to b
+    vector_ab = (b[0] - a[0], b[1] - a[1])
+    ortho_ab = (b[1] - a[1], a[0] - b[0])
+    vector_ap = (p[0] - a[0], p[1] - a[1])
+    ab_part, ortho_part = _linsolve_(vector_ab[0], ortho_ab[0], vector_ap[0],vector_ab[1], ortho_ab[1], vector_ap[1])
+    dist = distance(p, [p[0] + ortho_part * ortho_ab[0], p[1] + ortho_part * ortho_ab[1]] )
+    return ab_part, ortho_part, dist 
 
 def PointLocationInTria(p, t): #delivers location of point p in Tria t by vectors spanned by t from last vertex in tria
     denom = ((t[1][1] - t[2][1])*(t[0][0] - t[2][0]) + (t[2][0] - t[1][0])*(t[0][1] - t[2][1]))
@@ -122,17 +130,171 @@ def BoundingRectangle(vertices, borderExtension=0.0001):
     return miny-borderExtension, maxy+borderExtension, minx-borderExtension, maxx+borderExtension
 
 
+def segmentToBox (p1, p2, w):
+    """
+    Returns for a segement between points p1 and p2 (with [x,y] coordinates)
+    boundary of a box with length of segement where line is in the middle
+    and the box has width w
+    """
+    degree_dist_at_equator = 111120 #for longitude (or 111300?)
+    lat_degree_dist_average = 111000
+    degree_dist_at_lat = cos (radians(p1[0])) * degree_dist_at_equator
+    if round (p1[1], 6) == round (p2[1], 6): #segement exactly east-west direction
+        dx = 0   #difference for longitute in meters to reach corner from center end
+        dy = w/2 #difference for latitude in meters to reach corner from center end
+    elif round (p1[0], 6) == round (p2[0], 6): #segment is exactly north-south direction
+        dx = w/2
+        dy = 0
+    else: 
+        m = -1 / ((p2[0] - p1[0]) / (p2[1] - p1[1])) #gradient of perpendicular line
+        dx = sqrt( ( (w/2)**2) / (1 + m**2)) 
+        dy = dx * m 
+    dx /= degree_dist_at_lat #convert meters in longitute coordinate difference at geographical latitude
+    dy /= lat_degree_dist_average #convert meters in latitude coordinate difference 
+    l = []
+    if (p1[1] <= p2[1] and dy >= 0) or (p1[1] > p2[1] and dy < 0): #make sure to always insert in clockwise order
+        l.append([round(p1[1] - dx, 8), round(p1[0] - dy, 8)]) #buttom corner1
+        l.append([round(p1[1] + dx, 8), round(p1[0] + dy, 8)]) #buttom corner2
+        l.append([round(p2[1] + dx, 8), round(p2[0] + dy, 8)]) #top corner1
+        l.append([round(p2[1] - dx, 8), round(p2[0] - dy, 8)]) #top corner2
+    else: #insert vertices in different order to assure clockwise orientation
+        l.append([round(p1[1] + dx, 8), round(p1[0] + dy, 8)])
+        l.append([round(p1[1] - dx, 8), round(p1[0] - dy, 8)])
+        l.append([round(p2[1] - dx, 8), round(p2[0] - dy, 8)])
+        l.append([round(p2[1] + dx, 8), round(p2[0] + dy, 8)])
+    l.append(l[0]) #add first corner to form closed loop
+    return l
+
+
+def gauss_jordan(m, eps = 1.0/(10**10)):
+    """Puts given matrix (2D array) into the Reduced Row Echelon Form.
+       Returns True if successful, False if 'm' is singular.
+       NOTE: make sure all the matrix items support fractions! Int matrix will NOT work!
+       Written by Jarno Elonen in April 2005, released into Public Domain"""
+    (h, w) = (len(m), len(m[0]))
+    for y in range(0,h):
+      maxrow = y
+      for y2 in range(y+1, h):    # Find max pivot
+        if abs(m[y2][y]) > abs(m[maxrow][y]):
+          maxrow = y2
+      (m[y], m[maxrow]) = (m[maxrow], m[y])
+      if abs(m[y][y]) <= eps:     # Singular?
+        return False
+      for y2 in range(y+1, h):    # Eliminate column y
+        c = m[y2][y] / m[y][y]
+        for x in range(y, w):
+          m[y2][x] -= m[y][x] * c
+    for y in range(h-1, 0-1, -1): # Backsubstitute
+      c  = m[y][y]
+      for y2 in range(0,y):
+        for x in range(w-1, y-1, -1):
+          m[y2][x] -=  m[y][x] * m[y2][y] / c
+      m[y][y] /= c
+      for x in range(h, w):       # Normalize row y
+        m[y][x] /= c
+    return True
+
+def lin_equation_solve(M, b):
+    """
+    solves M*x = b
+    return vector x so that M*x = b
+    :param M: a matrix in the form of a list of list
+    :param b: a vector in the form of a simple list of scalars
+    """
+    m2 = [row[:]+[right] for row,right in zip(M,b) ]
+    result = gauss_jordan(m2)
+    return [row[-1] for row in m2] if result else None
+
+def getspline(xp, yp):
+    """
+    for x values xp with according y values yp a natural cubic spline is defined
+    note: x values should be sorted from lowest to highest value!
+    note: generates only float values to be compatible with gaus_jordan function used
+    returns list with deepcopy list of x-values and list of cubic spline paramters (one sgement after the other)
+    """
+    points = len(xp)
+    segments = points - 1
+    if (points != len(yp)) or (points < 3):
+        return None
+    A = []
+    b = []
+    xp_returned = [] #deepcopy of returned x-values
+    for i in range(points):
+        xp_returned.append(float(xp[i]))
+    for i in range(4 * segments):
+        A.append([])
+        b.append(0.0)
+        for j in range(4 * segments):
+            A[i].append(0.0)
+    for i in range(segments):
+        #condition for left end of segment
+        A[i][4*i+0] = float(xp[i]**3)
+        A[i][4*i+1] = float(xp[i]**2)
+        A[i][4*i+2] = float(xp[i])
+        A[i][4*i+3] = 1.0
+        b[i] = float(yp[i])
+        #condition for right end of segment
+        A[segments+i][4*i+0] = float(xp[i+1]**3)
+        A[segments+i][4*i+1] = float(xp[i+1]**2)
+        A[segments+i][4*i+2] = float(xp[i+1])
+        A[segments+i][4*i+3] = 1.0        
+        b[segments+i] = float(yp[i+1])
+        if i == 0:
+            continue #do outer points later, so one row missing now therefore -1 below
+        #condition for first derivation of inner points, setting b value to 0 omitted
+        A[2*segments+i-1][4*(i-1)+0] = float(3*xp[i]**2)
+        A[2*segments+i-1][4*(i-1)+1] = float(2*xp[i])
+        A[2*segments+i-1][4*(i-1)+2] = 1.0
+        A[2*segments+i-1][4*(i-1)+4] = float(-3*xp[i]**2)
+        A[2*segments+i-1][4*(i-1)+5] = float(-2*xp[i])
+        A[2*segments+i-1][4*(i-1)+6] = -1.0
+        #condition for second derivation of inner points, setting b value to 0 omitted
+        A[3*segments+i-1][4*(i-1)+0] = float(6*xp[i])
+        A[3*segments+i-1][4*(i-1)+1] = 2.0
+        A[3*segments+i-1][4*(i-1)+4] = float(-6*xp[i])
+        A[3*segments+i-1][4*(i-1)+5] = -2.0
+    # Now consider derivation for endpoints, here for NATURAL SPLINE so second derivation 0 at ends, setting b to 0 omitted
+    A[3*segments-1][0] = float(6*xp[0])
+    A[3*segments-1][1] = 2.0
+    A[4*segments-1][4*(segments-1)] = float(6*xp[segments])
+    A[4*segments-1][4*(segments-1)+1] = 2.0
+    #Now solve according linear equations
+    x = lin_equation_solve(A, b)
+    return [xp_returned, x]
+
+def evalspline(x, spline): #evaluates spline at position x
+    #assumes spline in format with two lists, first x-values giving intervals/segments, second all paramters for cubic spline one after the other
+    #important: it is assumed that x-values for intervals/segments are ordered from low to high
+    for i in range(len(spline[0]) - 1):#splines are one less then x-points
+        if x <= spline[0][i+1]: #for all points before second point use first spline segment, for all after the last-1 use last spline segment
+            break
+    return spline[1][4*i+0] * x**3 + spline[1][4*i+1] * x**2 + spline[1][4*i+2] * x + spline[1][4*i+3]
+
+def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline profile, the elevation of a point orthogonal to segment is calculated  (segement used to be runway)   
+    start = (rwy[0][1], rwy[0][0]) #start coordinates rwy 
+    end = (rwy[1][1], rwy[1][0]) #end coordinates rwy
+    startD = (start[0] - 0.1 * (end[0] - start[0]), start[1] - 0.1 * (end[1] - start[1])) #use starting point 10% of rwy length before to really get value for all points around runway
+    endD = (start[0] + 1.1 * (end[0] - start[0]), start[1] + 1.1 * (end[1] - start[1]))   #use end point 10% of rwy length behind to really get value for all points around runway
+    inclination_of_ortho = (end[1] - start[1], start[0] - end[0])
+    orthoStartD = (p[0] - inclination_of_ortho[0], p[1] - inclination_of_ortho[1]) # Start of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
+    orthoEndD = (p[0] + inclination_of_ortho[0], p[1] + inclination_of_ortho[1]) # End of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
+    p_centered = intersection(startD, endD, orthoStartD, orthoEndD) #location of p on center line
+    d = distance(start, p_centered)
+    elev = evalspline(d, rwySpline)
+    return elev
+
+
 def createFullCoords(x, y, t):
     """
     returns for coordinates (x, y) in tria t (list of 3 vertex list with all coords of vertices of t) the full coordinates
     """
     v = [x, y]
     l0, l1 = PointLocationInTria(v, t) # returns length for vectors from point t3 with l0*(t2-t0) and l1*(t2-t1)
-    elevation = t[2][2] + l0 * (t[0][2] - t[2][2])  + l1 * (t[1][2] - t[2][2])
-    if elevation < -32765:
-        v.append(-32768.0) #append correct elevation (stays -32768.0 in case of raster)
+    if t[0][2] == -32768.0 or t[1][2] == -32768.0 or t[2][2] == -32768.0: # at least one tria vertex is getting elevation from raster  ############## UPDATED ON 31 March 2020 ############################
+        elevation = -32768.0 #so take also elevation in tria from raster (might cause PROBLEM when neighbour tria does not use raster at that position --> to be solved when creating dsf vertices
     else:
-        v.append(elevation)
+        elevation = t[2][2] + l0 * (t[0][2] - t[2][2])  + l1 * (t[1][2] - t[2][2])
+    v.append(elevation)
     v.extend([0, 0]) ### leave normal vectors to 0 ##### TO BE ADAPTED IN CASE OF NO RASTER !!!!!
     for i in range(5, len(t[0])): #go through optional coordinates s/t values based on first vertex in tria
         v.append(t[2][i] + l0 * (t[0][i] - t[2][i])  + l1 * (t[1][i] - t[2][i]))
