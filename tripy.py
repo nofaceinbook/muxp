@@ -7,7 +7,7 @@ from collections import namedtuple
 
 Point = namedtuple('Point', ['x', 'y'])
 
-EPSILON = math.sqrt(sys.float_info.epsilon) / 8 #### schmax: NOT SURE IF DIVISION BY 8 VALID BUT SEEMS TO WORK FOR MORE VALID POLYGONS
+EPSILON = math.sqrt(sys.float_info.epsilon) / 10 #### schmax: NOT SURE IF DIVISION BY 10 VALID BUT SEEMS TO WORK FOR MORE VALID POLYGONS
 ### ALTERNATIVE would also be to use: https://github.com/lionfish0/earclip (but this version has even highe value for epsilon)
 
 
