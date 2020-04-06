@@ -288,6 +288,10 @@ def createFullCoords(x, y, t):
     """
     returns for coordinates (x, y) in tria t (list of 3 vertex list with all coords of vertices of t) the full coordinates
     """
+    ##### NEW 06.04.2020: Might be the x,y are one vertex of t. In that case directly return that vertex, then correct elevation of that vertex is not destroyed #########
+    for v in t[:3]: #we only need the first three elements of t containing vertex information
+        if round(v[0],7) == round(x,7) and round(v[1],7) == round(y,7):
+            return v
     v = [x, y]
     l0, l1 = PointLocationInTria(v, t) # returns length for vectors from point t3 with l0*(t2-t0) and l1*(t2-t1)
     if t[0][2] == -32768.0 or t[1][2] == -32768.0 or t[2][2] == -32768.0: # at least one tria vertex is getting elevation from raster  ############## UPDATED ON 31 March 2020 ############################
