@@ -14,11 +14,11 @@ cut_polygon:
       - -7.968334 -14.399324 
       - -7.970666 -14.402145 
       - -7.969124 -14.405320
-	   - -7.965970 -14.404395
+      - -7.965970 -14.404395
 
 cut_flat_terrain_in_mesh:
    name: lake_se_of_apron
-	terrain: terrain_Water
+   terrain: terrain_Water
    elevation: 77.0
    coordinates:
       - -7.972801654803281 -14.40461044283427
@@ -30,15 +30,15 @@ cut_flat_terrain_in_mesh:
 
 cut_spline_segment:
    name: generate_profiled_runway
-	width: 80.0
-	profile_interval: 30.0
-	# terrain: lib/g10/terrain10/grass_tmp_sdry_fl.ter
-	terrain: lib/g10/terrain10/apt_vhot_dry.ter
-	3d_coordinates:
-	   - -7.962976  -14.407055  79.0
-		- -7.968117  -14.396748  86.0
+   width: 80.0
+   profile_interval: 30.0
+   # terrain: lib/g10/terrain10/grass_tmp_sdry_fl.ter
+   terrain: lib/g10/terrain10/apt_vhot_dry.ter
+   3d_coordinates:
+      - -7.962976  -14.407055  79.0
+      - -7.968117  -14.396748  86.0
       - -7.971141  -14.390660  68.0
-		- -7.976516  -14.379969  63.0
+      - -7.976516  -14.379969  63.0
 
 OFF_update_network_levels:
    coordinates:
@@ -52,16 +52,16 @@ OFF_update_network_levels:
       - -7.956304409639571 -14.40890201677691
       - -7.953677429759369 -14.4098034681881
       - -7.952259314387884 -14.40983139430736
-	road_coords_drapped:
+   road_coords_drapped:
       - -7.952259314387884 -14.40983139430736 1
-		- -7.961195303939608 -14.40797929124783 2
-		- -7.956920934501413 -14.40907695417968 1
+      - -7.961195303939608 -14.40797929124783 2
+      - -7.956920934501413 -14.40907695417968 1
 		
 OFF_limit_edges:
     name: airport_boundary
-	 edge_limit: 100
+    edge_limit: 100
     coordinates:
-	 - -07.97614821  -014.37843147 
+    - -07.97614821  -014.37843147 
     - -07.97286278  -014.38495518 
     - -07.97147630  -014.38426445 
     - -07.96993533  -014.38735553 
@@ -76,8 +76,8 @@ OFF_limit_edges:
 
 OFF_update_raster_elevation:
    name: beginning_of_runway
-	elevation: 89
-	coordinates:
+   elevation: 89
+   coordinates:
       - -7.963480422169347 -14.40712409991293
       - -7.968280383985815 -14.397250416844
       - -7.967541850249729 -14.39688700649562
@@ -89,7 +89,6 @@ OFF_update_raster4spline_segment:
 	width: 90.0
 	3d_coordinates:
 	   - -7.962976  -14.407055  79.0
-		- -7.968117  -14.396748  86.0
-      - -7.971141  -14.390660  68.0
-		- -7.976516  -14.379969  63.0
-		
+	   - -7.968117  -14.396748  86.0
+           - -7.971141  -14.390660  68.0
+	   - -7.976516  -14.379969  63.0
