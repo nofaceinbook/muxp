@@ -22,7 +22,11 @@ Refer https://github.com/nofaceinbook/muxp/blob/master/LIMITATIONS.md for curren
 
 ## How does MUXP work
 
-tbd: explanition / picture
+Muxp adapts the dsf-files of X-Plane including the mesh information. For the adaption the scenery developer creates a muxp file (yaml text file) including deintions for the mesh like flattening of a certain area. 
+
+![Functioning Of Muxp](https://github.com/nofaceinbook/muxp/blob/master/doc/images/muxpFunciton.JPG)
+
+
 
 ## Manual for Users
 
