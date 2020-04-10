@@ -40,10 +40,10 @@ cut_polygon.apron:
 
 cut_spline_segment.runway:
    name: generate_profiled_runway
-	width: 34.0
-	profile_interval: 30.0
-	terrain: lib/g10/terrain10/coni_tmp_rain_hill.ter
-	3d_coordinates:
+   width: 34.0
+   profile_interval: 30.0
+   terrain: lib/g10/terrain10/coni_tmp_rain_hill.ter
+   3d_coordinates:
       - 50.40998721418053 -125.1362999948315   97.0
       - 50.40989161135651 -125.1356064776594   97.0
       - 50.40979486009405 -125.13487242165     97.0
