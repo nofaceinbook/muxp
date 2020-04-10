@@ -8,9 +8,9 @@ area: 45.392391  45.403086  6.625944  6.644899
 
 update_raster_elevation.buttonDown:
   name: elevation_further_down_runway
-	elevation: 1922
+  elevation: 1922
   include_raster_square_criteria: center_inside
-	coordinates:
+  coordinates:
       - 45.39795900407896 6.637992367534523
       - 45.39794563719404 6.638720704975361
       - 45.4003393746483 6.638695261996657
@@ -19,9 +19,9 @@ update_raster_elevation.buttonDown:
       
 update_raster_elevation.button:
   name: button_of_runway
-	elevation: 1937
+  elevation: 1937
   include_raster_square_criteria: center_inside
-	coordinates:
+  coordinates:
       - 45.39881825860668 6.636350916088976
       - 45.39881861887337 6.637241153408957
       - 45.39797933931637 6.637124082765597
@@ -32,9 +32,9 @@ update_raster_elevation.button:
       
 update_raster_elevation.lowApron:
    name: raster_around_lower_apron
-	elevation: 1995
+   elevation: 1995
    include_raster_square_criteria: center_inside
-	coordinates:    
+   coordinates:    
       - 45.39545403160656 6.635514069995335
       - 45.39460639201624 6.635508076846897
       - 45.39460641203794 6.637030545399765
@@ -47,9 +47,9 @@ update_raster_elevation.lowApron:
       
 update_raster_elevation.topRunway:
   name: raster_around_top_runway
-	elevation: 2035
+  elevation: 2035
   include_raster_square_criteria: center_inside
-	coordinates:   
+  coordinates:   
       - 45.39463169618394 6.631358860391519
       - 45.39461450356765 6.633674886703352
       - 45.39536948819673 6.63368347848224
@@ -185,10 +185,10 @@ cut_polygon.apronLow:
       
 cut_spline_segment.runway:
   name: generate_profiled_runway
-	width: 75.0
-	profile_interval: 30.0
-	terrain: lib/g10/terrain10/apt_cld_rain.ter
-	3d_coordinates:
+  width: 75.0
+  profile_interval: 30.0
+  terrain: lib/g10/terrain10/apt_cld_rain.ter
+  3d_coordinates:
       - 45.39633863011023 6.633322390742591  2010.0
       - 45.39648623283095 6.633534218604861  2010.0
       - 45.39661191318605 6.633739492777842  2010.0
