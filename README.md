@@ -1,10 +1,12 @@
 # Mesh Updater X-Plane (MUXP)
-This program allows to update the mesh files (.dsf-files) for X-Plane 11. 
+This program allows to update the mesh files (.dsf-files) for X-Plane 11.
+![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MuxpBeforeAfterYYR.JPG)
+As shonw in this picture you can adapt the mesh e.g. to prepare the terrain for a new runway.
 
 ## WARNING - Early Development Stage
 This program is in an early development stage and still has some errors. For the moment only use it in case you know what you are doing. In any case you do everything on your own risk.
 
-Refer https://github.com/nofaceinbook/muxp/blob/master/LIMITATIONS.md for current limitations of that early version and https://github.com/nofaceinbook/muxp/issues for known issues.
+Refer [Limitations](https://github.com/nofaceinbook/muxp/blob/master/LIMITATIONS.md)  of that early version and the already [Known Issues](https://github.com/nofaceinbook/muxp/issues).
 
 ## Highlights
 
@@ -31,7 +33,7 @@ Muxp adapts the dsf-files of X-Plane that do include the mesh information (not t
 
 ## Manual for Users
 
-As a user of muxp you just need to install muxp. Until the executable will be published (when a more stable version is ready) you need python 3 on your computer. Copy all the *.py* files in a folder. In order to not required the manual unzipping of the packed dsf-files you will need also to install [pyzlma](https://github.com/fancycode/pylzma) which should be easy with *pip install pylzma*. Now you can run pyhton on *muxp.py*. 
+As a user of muxp you just need to install muxp. Until the executable will be published (when a more stable version is ready) you need a 64 bit version of python 3 on your computer. Copy all the *.py* files in a folder. In order to not required the manual unzipping of the packed dsf-files you will need also to install [pyzlma](https://github.com/fancycode/pylzma) which should be easy with *pip install pylzma*. Now you can run pyhton on *muxp.py*. 
 
 When starting muxp the first time you need to set your X-Plane 11 folder and the muxp folder (there is a option to create a new folder called "zmuxp mesh updates" within your Custom Secenery folder. When you tick the option for generating .kml files, muxp will create .kml files where you can see the mesh changes e.g. within Google Earth.
 
