@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.1.3 exp
+# muxp_file.py    Version: 0.1.4 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -18,6 +18,8 @@
 #   <http://www.gnu.org/licenses/>. 
 #
 #******************************************************************************
+
+#Change since 0.1.3: marked 3d coordinates as non swapped
 
 from logging import getLogger
 from os import path, replace
@@ -111,7 +113,8 @@ def validate_muxp(d, logname):
                   "3d_coordinates" : ["float", "float", "float"],
                   "road_coords_drapped" : ["float", "float", "int"] }
     
-    COORD_SWAPPING = ["coordinates", "3_coordinates", "road_coords_drapped"] #If parameter/list is included here coordinates from lon/lat will be swapped to x,y
+    COORD_SWAPPING = ["coordinates", "road_coords_drapped"] #If parameter/list is included here coordinates from lon/lat will be swapped to x,y
+                     ########## IMPORTANT: 3d_coordinates currently not swpapped !!!!!!!!!!! ############################################
     
     warnings = 0
     errors = 0
