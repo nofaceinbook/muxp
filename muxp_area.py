@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.1.3 exp
+# muxp_area.py    Version: 0.1.4 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -21,6 +21,8 @@
 #   <http://www.gnu.org/licenses/>. 
 #
 #******************************************************************************
+
+#Changes from version 0.1.3: Updated CutPoly for inner trias (no deepcopy and remove when inner trias are not kept)
 
 from xplnedsf2 import *
 from logging import getLogger
@@ -221,12 +223,16 @@ class muxpArea:
             outer.extend(o), inner.extend(i), border.extend(b)
 
             if PointInPoly(tria[0], p) and PointInPoly(tria[1], p) and PointInPoly(tria[2], p): #special case that tria lies completely in p
-                if elev != None: #if elevation should be adapted do this for inner trias
-                    inside_tria = deepcopy(t)
-                    for tv in range(3):
-                        inside_tria[tv][2] = elev
-                    new_trias.append(inside_tria)
-                    self.log.info("Adapted elevation in inside tria. New Tria: {}".format(inside_tria))
+                if keepInnerTrias: #new 11.04.2020 if tria is completely within in t and inner trias should be removed, we need to define this here
+                    if elev != None: #if elevation should be adapted do this for inner trias
+                        #inside_tria = deepcopy(t) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
+                        for tv in range(3):
+                            #inside_tria[tv][2] = elev ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
+                            t[tv][2] = elev
+                        #new_trias.append(inside_tria) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
+                        self.log.info("Adapted elevation in inside tria. New Tria: {}".format(t)) #was format(inside_tria) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
+                else: #tria is completely within p and inner trias shall be removed
+                    old_trias.append(t) #so remove it
                     
             if keepInnerTrias: # In case inside p will get new mesh later, we leave inner trias away
                 for poly in i: # otherwise we will now triangulate inner polygosn with earclip    #### ERROR CHECKING ONLY ######
