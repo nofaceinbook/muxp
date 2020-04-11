@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.3 exp
+# muxp_math.py   Version: 0.1.4 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -20,6 +20,8 @@
 #   <http://www.gnu.org/licenses/>. 
 #
 #******************************************************************************
+
+#Change since 0.1.3: Spline evaluation returns distance for error checking
 
 from math import sin, cos, atan2, sqrt, radians #for different calculations
 
@@ -281,7 +283,7 @@ def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline 
     p_centered = intersection(startD, endD, orthoStartD, orthoEndD) #location of p on center line
     d = distance(start, p_centered)
     elev = evalspline(d, rwySpline)
-    return elev
+    return elev, d #### d just for TESTING #########
 
 
 def createFullCoords(x, y, t):
