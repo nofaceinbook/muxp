@@ -1,5 +1,8 @@
 ### SOURCE: https://github.com/linuxlewis/tripy (MIT License Copyright (c) 2017 Sam Bolgert)
 # some adaptions as commented below
+# VERSION in muxp 0.1.4
+
+#Change since 0.1.3: set devisor for EPSILON from 10 to 1000
 
 import math
 import sys
@@ -7,7 +10,7 @@ from collections import namedtuple
 
 Point = namedtuple('Point', ['x', 'y'])
 
-EPSILON = math.sqrt(sys.float_info.epsilon) / 10 #### schmax: NOT SURE IF DIVISION BY 10 VALID BUT SEEMS TO WORK FOR MORE VALID POLYGONS
+EPSILON = math.sqrt(sys.float_info.epsilon) / 1000 #### schmax: NOT SURE IF DIVISION BY 100 VALID BUT SEEMS TO WORK FOR MORE VALID POLYGONS
 ### ALTERNATIVE would also be to use: https://github.com/lionfish0/earclip (but this version has even highe value for epsilon)
 
 
