@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.3 exp"
+muxp_VERSION = "0.1.4 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -22,6 +22,7 @@ muxp_VERSION = "0.1.3 exp"
 #
 #******************************************************************************
 
+# Change since 0.1.3 updated spline definition by non swapped 3d coordinates
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -432,16 +433,17 @@ class muxpGUI:
                 #    if len(new_split) > 0: split_trias.extend(new_split)  ### to be removed after testing ###
                 xp, yp = [], [] #points for spline to be created
                 for p in c["3d_coordinates"]:
-                    xp.append(distance(c["3d_coordinates"][0][:2], p[:2]))
+                    xp.append(distance([c["3d_coordinates"][0][1], c["3d_coordinates"][0][0]], [p[1], p[0]])) #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
                     yp.append(p[2])
                 log.info("Points for spline: {}, {}".format(xp, yp))
                 spline = getspline(xp, yp)
                 log.info("Spline: {}".format(spline))
                 for vertex in a.getAllVerticesForCoords(segment_interval_bound): #set vertices of intervals to correct elevation
-                    elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)
+                    elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
+                    log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
                     vertex[2] = elev                
                 for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
-                    elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)
+                    elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)   #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
                     vertex[2] = elev
                 elevation_scale = 0.05 #allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
                 shown_polys = polysouter
@@ -494,7 +496,7 @@ class muxpGUI:
                 raster_bounds = [segment_bound] #include boundary for raster selection
                 xp, yp = [], [] #points for spline to be created
                 for p in c["3d_coordinates"]:
-                    xp.append(distance(c["3d_coordinates"][0][:2], p[:2]))
+                    xp.append(distance([c["3d_coordinates"][0][1], c["3d_coordinates"][0][0]], [p[1], p[0]])) #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
                     yp.append(p[2])
                 log.info("Points for spline: {}, {}".format(xp, yp))
                 spline = getspline(xp, yp)
@@ -504,7 +506,7 @@ class muxpGUI:
                         if PointInPoly(corner, segment_bound):
                             raster_corners.append(raster_corners[0]) #make squre to closed poly
                             raster_bounds.append(raster_corners)
-                            elev = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], raster_center, spline)
+                            elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], raster_center, spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
                             self.dsf.Raster[0].data[raster_index[0]][raster_index[1]] = round(elev)
                             log.info("Set raster {} to elevation: {}m".format(raster_index, round(elev)))
                             break
