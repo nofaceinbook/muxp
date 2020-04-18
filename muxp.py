@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.4 exp"
+muxp_VERSION = "0.1.5 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -22,7 +22,9 @@ muxp_VERSION = "0.1.4 exp"
 #
 #******************************************************************************
 
-# Change since 0.1.3 updated spline definition by non swapped 3d coordinates
+# Change since 0.1.3: updated spline definition by non swapped 3d coordinates
+# Change since 0.1.4: in CutSplineSegment calling createPolyTerrain with special method for segment_intervals
+#                     Correct handling when concave cutting polygon in PolyCutPoly (border_v are then anti_clockwise)
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -425,7 +427,7 @@ class muxpGUI:
                         segment_interval_bound.append([segment_bound[corner1][0] + i * interval_vector[0],  segment_bound[corner1][1] + i * interval_vector[1]])
                 segment_interval_bound.append(segment_interval_bound[0]) #add first coordinate to get closed poly
                 polysouter, polysinner, borderv = a.CutPoly(segment_interval_bound, None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
-                a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0) #for first step take default elevation -32768 for raster, will be changed below #### OPEN: earlip seems to work nicely, always ??? ##############
+                a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0, "segment_intervals") #for first step take default elevation -32768 for raster, will be changed below, create trias as "segment_intervals"
                 #log.info("BORDER VERTICES: {}".format(borderv))
                 #split_trias = [] ## SPLIT TRIAS JUST FOR TESTING --> TO BE REMOVED
                 for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
