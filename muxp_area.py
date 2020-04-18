@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.1.4 exp
+# muxp_area.py    Version: 0.1.5 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -23,6 +23,9 @@
 #******************************************************************************
 
 #Changes from version 0.1.3: Updated CutPoly for inner trias (no deepcopy and remove when inner trias are not kept)
+#Changes from version 0.1.4: Updated CutPoly to handle also polygons that are completely inside one tria
+#                            Using new IsClockwise (instead is_clockwise) and earclipTrias (instead earclip) both now in muxp_math.py
+#                            Updated CreatPolyTerrain to have a method how triangulation is performed. Appart from earclip special method for segment_intervals introduced
 
 from xplnedsf2 import *
 from logging import getLogger
@@ -127,7 +130,7 @@ class muxpArea:
         """
         ############ TBD: Handle accuracy in case cut is close to vertices and cutting points are close to segements, especially co-linar segments ###############
         ############ TBD: Check where really deepcopy is required ################
-        self.log.info("Polygon {} cutting from start-segement {} at distance: {}".format(p, c_start, c_start_distance))
+        self.log.info("Polygon {} cutting with {} from start-segement {} at distance {}".format(p, c, c_start, c_start_distance))
         border_v = [] #these vertices are building the border between the cut halfs of p from entry to exit point (including vertices of c and cutting points)
         for i in range(c_start, len(c) - 1): #check for each segement of cutting poly...
             len_p = len(p)
@@ -160,32 +163,48 @@ class muxpArea:
         exit_segment = border_v[-1][1]
         border_v[0] = border_v[0][0] #get rid of not needed sgement info in vertex list
         border_v[-1] = border_v[-1][0] #get rid of not needed sgement info in vertex list
-        part1 = deepcopy(border_v)
-        part1.append(p[exit_segment])#the first vertex of exit-segment is the first in the loop back (outer) to entry
-        s = (exit_segment-1)%len_p
-        while s !=  entry_segment: #go backwards through p till entry point for cut found
-            part1.append(p[s])
-            s = (s-1)%len_p
-        part2 = deepcopy(border_v)
-        part2.append(p[(exit_segment + 1)%len_p]) #second vertex of exit-segment is the first in loop forward (inner) back to entry
-        s = (exit_segment+2)%len_p
-        while s !=  (entry_segment+1)%len_p: #go forward through p till entry point for cut found
-            part2.append(p[s])
-            s = (s+1)%len_p
-        #### AS part 1 was constructed backwards we must no reverse it in order to have it in clockwise order again
-        part1.reverse()
-        ### Now check which part is outer and inner:
-        ## The following line assumes that c[i] to c[i+1] is still the butting line of p where cutting polygon exits p
-        if ((c[i+1][0] - c[i][0]) * (p[exit_segment][1] - c[i][1]) - (c[i+1][1] - c[i][1]) * (p[exit_segment][0] - c[i][0])) > 0: #first point of exit segment of p lies on outer side in case of clockwise going through p
-            outer = part1
-            inner = part2
-        else:
-            outer = part2
-            inner = part1
-            self.log.info("    SWAPPED INNER AND OUTER POLYS!")
+        if entry_segment == exit_segment: #Special case if entry and exit on same segment, then one part is just formed by border vertices ####### NEW 18.04.2020 ##########
+            if not IsClockwise(border_v): #so we have to be sure that also this part is ordered clockwise; if c is concave then an outer part (anti-clockwis) can cut into p
+                self.log.warning("   Entry = Exit segment and border vertices are not clockwise --> it is reversed!!!")
+                outer = deepcopy(border_v)
+                outer.reverse() #as they are not clockwise
+                inner = deepcopy(border_v) #border_v are first part around inner
+                for s in range(len_p): #and follow then all around p back to first border_v
+                    inner.append(p[(entry_segment+1+s)%len_p])
+            else: #so the inner part is cutting into p on the same segment
+                self.log.warning("   Entry = Exit segment but border vertices clockwise")
+                inner = deepcopy(border_v) #inner are thus just border_v which are already clockwise
+                outer = deepcopy(border_v)
+                outer.reverse() #these border_v are now not including inner part, but outer, so they have to be reversed
+                for s in range(len_p): #and follow then all around p back to first border_v
+                    outer.append(p[(entry_segment+1+s)%len_p])
+        else: #no special case; entry and exit to p are on different segments
+            part1 = deepcopy(border_v)
+            part1.append(p[exit_segment])#the first vertex of exit-segment is the first in the loop back (outer) to entry
+            s = (exit_segment-1)%len_p
+            while s !=  entry_segment: #go backwards through p till entry point for cut found
+                part1.append(p[s])
+                s = (s-1)%len_p
+            part2 = deepcopy(border_v)
+            part2.append(p[(exit_segment + 1)%len_p]) #second vertex of exit-segment is the first in loop forward (inner) back to entry
+            s = (exit_segment+2)%len_p
+            while s !=  (entry_segment+1)%len_p: #go forward through p till entry point for cut found
+                part2.append(p[s])
+                s = (s+1)%len_p
+            #### AS part 1 was constructed backwards we must no reverse it in order to have it in clockwise order again
+            part1.reverse()
+            ### Now check which part is outer and inner:
+            ## The following line assumes that c[i] to c[i+1] is still the cutting line of p where cutting polygon exits p
+            if ((c[i+1][0] - c[i][0]) * (p[exit_segment][1] - c[i][1]) - (c[i+1][1] - c[i][1]) * (p[exit_segment][0] - c[i][0])) > 0: #first point of exit segment of p lies on outer side in case of clockwise going through p
+                outer = part1
+                inner = part2
+            else:
+                outer = part2
+                inner = part1
+                self.log.info("    SWAPPED INNER AND OUTER POLYS!")
         ### Special case if entry and exit point are on the same segment of p, then the inner polygon makes no use of of vertices from p, just from border_v
-        if entry_segment == exit_segment:
-            inner = deepcopy(border_v)
+        #if entry_segment == exit_segment:  #### NEW 18.04.2020 Special case solved above ####
+        #    inner = deepcopy(border_v)
         
         outer1, inner1, border1 = self.PolyCutPoly(outer, c, i, distance(c[i], border_v[-1]) + 0.01) ######  0.0001 was not sufficeint, why so high rounding errors ??? ####
         if border1 == []: #no further cut for outer
@@ -197,30 +216,69 @@ class muxpArea:
         outer1.extend(outer2)
         inner1.extend(inner2)
         border_v.extend(border2)
+        self.log.info("  Cutted into outer {} and inner {}".format(outer1, inner1))
         return outer1, inner1, border_v
 
 
     def CutPoly(self, p, elev=None, keepInnerTrias=True):
+        #################### TBD: Must p be closed (first = last vertex in list) or not. Seems some functions below have different assumptions. ####################
         outer = []
         inner = []
         border = []
         new_trias = []
         old_trias = []
+        p_inside_one_tria = False
         self.log.info("Cutting Polygon p into area, retrieving inner and outer sub-polygons.")
-        if not is_clockwise(p):
+        if not IsClockwise(p):
             self.log.warning("Polygon is not clockwise --> it is reversed!!!")
             p.reverse()
         for t in self.atrias: #go through all trias in area
             tria = [t[0][0:2], t[1][0:2], t[2][0:2]]
-            
+            o, i, b = [], [], [] #need to be reset, in case p was lying completely inside a privous tria  
+            shifts = 0 #counting how many shifts for next vertex in p have been performed ot find vertex outside tria as starting point
             while isPointInTria(p[0], tria): #make sure that first vertex of p is outside tria
-                ############# TBD: special case that whole p is in tria!!!! ################
-                self.log.info("p[0] inside tria --> shifting poly {}".format(p))
-                p = p[1:]
-                p.append(p[0])
-                self.log.info("       to poly {}".format(p))
-            o, i, b = self.PolyCutPoly(tria, p)
-            outer.extend(o), inner.extend(i), border.extend(b)
+                if shifts >= len(p): #special case that whole p is in tria, all vertices of p are inside
+                    self.log.info("Polygon p lies completely in tria {}".format(tria))
+                    for start_p in range(len(p)-1): #### ASSUMING CLOSED P ###########
+                        for segment in range(len(p)-1): ### ASSUMING CLOSED P #########
+                            cp = intersection(tria[0], p[start_p], p[segment], p[segment+1])  ###### IMPORTANT TBD: tria[0] might be different for trias lying one over the other in different patches !!!!! ####
+                                ###### ==> TBD: instead of starting with tria[0] always start with most S/SW corner !!! #######################
+                            self.log.info("For start {} with segment {} cutting point: {}".format(start_p, segment, cp))
+                            if cp:
+                                if round(cp[0],7) == round(p[start_p][0],7) and round(cp[1],7) == round(p[start_p][1],7):
+                                    cp = None #if cutting point is just the point we want to sart inside p this is okay, does not count for cutting point
+                                else:
+                                    break #there is a cutting point, so we need to check anohter start in p
+                        if not cp: # No cutting point, meaning we found a line from tria[0] to p[p_start] that is not cutting any other segment of p and can thus be used as a line to create an outer polygon inside tria around p
+                            o = tria #for the outer polygon to be triangulated go first along tria 
+                            o.append(tria[0]) #back to tria[0]
+                            for p_v in range(start_p,-1,-1): #go back to first point of of p
+                                o.append(p[p_v])
+                            for p_v in range(len(p)-2, start_p-1,-1): #go from last back to start in p ##### ASSUMING CLOSED P, as last is not added again as equal to p[0] ############
+                                o.append(p[p_v]) ### as o is not closed we do not need to add again tria[0]
+                            self.log.info("Outer Polygon around p inside tria is: {}".format(o))
+                            p_inside_one_tria = True
+                            o = [o] #o is list of outer polygons, here just o itself
+                            i = [deepcopy(p)] #inner polygon is p  #### deepcopy required???
+                            b = deepcopy(p) #as p is inside tria, all vertices of p are boundary from inner polygon p to polygon around p  ###deepcopy required???
+                            ## old_trias.append(t) #tria t is replaced by triangulation of o ### Not needed any more as we have border vertices below
+                            outer.extend(o), inner.extend(i), border.extend(b)
+                            break #start_p was found
+                    if o == []:
+                        self.log.error("Outer Polygon around p in tria not found. Area not triangulated!")
+                        return [], [], []
+                    break #we do not need to shift further as we did already go around and handled p inside tria
+                
+                shifts += 1
+                if not p_inside_one_tria: #if p is inside one tria, don't really shift vertices of p, to always have same triangulation of the tria containing p
+                    p = p[1:] ############# TBD: SHIFTING DOES ASSUME CLOSED P, as verst vertex is ommitted and stays only if it is also last in the list !!! #########
+                    p.append(p[0])
+                    self.log.info("p[0] inside tria --> shifting poly {}".format(p))
+                    self.log.info("       to poly {}".format(p))
+
+            if not p_inside_one_tria: #if p is inside one tria, no PolyCutPoly required
+                o, i, b = self.PolyCutPoly(tria, p)
+                outer.extend(o), inner.extend(i), border.extend(b) 
 
             if PointInPoly(tria[0], p) and PointInPoly(tria[1], p) and PointInPoly(tria[2], p): #special case that tria lies completely in p
                 if keepInnerTrias: #new 11.04.2020 if tria is completely within in t and inner trias should be removed, we need to define this here
@@ -236,8 +294,8 @@ class muxpArea:
                     
             if keepInnerTrias: # In case inside p will get new mesh later, we leave inner trias away
                 for poly in i: # otherwise we will now triangulate inner polygosn with earclip    #### ERROR CHECKING ONLY ######
-                    if len(earclip(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
-                    for tria in earclip(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
+                    if len(earclipTrias(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclipTrias(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
+                    for tria in earclipTrias(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
                         if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
                         new_v = [None, None, None]
                         for e in range(3):
@@ -247,9 +305,10 @@ class muxpArea:
                                 new_v[e][2] = elev
                         new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
 
-            for poly in o: #outer polys have always to be earclipped, but no elevation/terrian change 
-                if len(earclip(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
-                for tria in earclip(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
+            for poly in o: #outer polys have always to be earclipped, but no elevation/terrian change
+                self.log.info("Earclipping outer poly: {}".format(poly)) ############### ERROR CHECKING, TO BE REMOVED ##############
+                if len(earclipTrias(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclipTrias(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
+                for tria in earclipTrias(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
                     if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
                     new_v = [None, None, None]
                     for e in range(3):
@@ -258,7 +317,7 @@ class muxpArea:
                     self.log.info("+++ TRIA IN OUTER POLY APPENDED: {}".format(new_trias[-1])) ######## LOG JUST FOR TESTING, TO BE REMOVED ###########
                      
             if b != []: #we have border vertices, so there was a cut in this tria
-                old_trias.append(t) #so this tria is replaced by trias of inner and outer polys
+                old_trias.append(t) #so this tria is replaced by trias of inner and outer polys ###### OPEN: BETTER REMOVE TRIAS IN DIFFERENT PARTS ABOVE DEPENDING ON CONTEXT ???? #########
         for nt in new_trias: #add all new trias
             self.atrias.append(nt)
             #### tbd: adapt elevation for all trias (only outer if p own mesh) and create for inner trias new terrain patches if terrain given
@@ -628,16 +687,26 @@ class muxpArea:
         self.dsf.Patches.append(newPatch)
         return len(self.dsf.Patches)-1 #Index of the new patch is now the last just added
         
-    def createPolyTerrain(self, poly, terrain, elev):
+    def createPolyTerrain(self, poly, terrain, elev, method = "earclip"):
         """
         Creates trias of given terrain inside the poly.
         Poly is expected to be closed (first = last vertex)
         """
         patchID = self.getPatchID(terrain) ### WARNING: This new patch has still no poolDefintion in first Command!!!!!
-
-        if len(earclip(deepcopy(poly[:-1]))) < len(poly) - 3: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclip(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
-        for tria in earclip(deepcopy(poly[:-1])): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
-            if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
+        if method == "earclip":
+            if len(earclipTrias(deepcopy(poly[:-1]))) < len(poly) - 3: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclipTrias(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
+            trias = earclipTrias(deepcopy(poly[:-1])) #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip always returns clockwise order
+        elif method == "segment_intervals":
+            trias = []
+            l = len(poly)
+            for i in range(1, int(l/2)): #poly is assumed to have odd number of vertices, as first is same as last vertex; int rounds to lower value
+                trias.append([poly[l-i], poly[i], poly[l-i-1]])
+                trias.append([poly[i], poly[i+1], poly[l-i-1]])
+            self.log.info("Segment Interval Poly generated: {}".format(trias))
+        else:
+            self.log.error("Method {} not supported in createPolyTerrain.".format(method))
+        for tria in trias: 
+            if len(tria) < 3: self.log.error("creatPolyTerrain method {} has returned less then 3 vertices for poly: {}".format(method, poly))  #### ERROR CHECKING ONLY ######
             new_v = [None, None, None]
             for e in range(3):
                 new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0] #This version only creates simple vertices without s/t coordinates
