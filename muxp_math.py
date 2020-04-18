@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.4 exp
+# muxp_math.py   Version: 0.1.5 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -22,6 +22,8 @@
 #******************************************************************************
 
 #Change since 0.1.3: Spline evaluation returns distance for error checking
+#Change since 0.1.4: Removed () around None for return value of intersection
+#                    Using new earclipping from mrbaozi directly inside this file
 
 from math import sin, cos, atan2, sqrt, radians #for different calculations
 
@@ -36,7 +38,7 @@ def intersection(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects 
     if s0 >= 0 and s0 <= 1 and t0 >= 0 and t0 <= 1:
         return (round((p1[0] + s0 * (p2[0] - p1[0])), 8), round(p1[1] + s0 * (p2[1] - p1[1]), 8))  ### returns the cutting point as tuple; ROUNDING TO ALWAYS GET SAME POINT 
     else:                    
-        return (None)
+        return None   ######### Removed () around none on 12.04.2020
 
 def distance(p1, p2): #calculates distance between p1 and p2 in meteres where p is pair of longitude, latitude values          
     R = 6371009 #mean radius earth in m
@@ -305,4 +307,126 @@ def createFullCoords(x, y, t):
     for i in range(5, len(t[0])): #go through optional coordinates s/t values based on first vertex in tria
         v.append(t[2][i] + l0 * (t[0][i] - t[2][i])  + l1 * (t[1][i] - t[2][i]))
     return v
+
+
+############################### EARCLIPPING FUNCTIONS ########################
+#Code copied from mrbaozi (MIT license)
+#https://github.com/mrbaozi/triangulation 
         
+def IsConvex(a, b, c):
+    # only convex if traversing anti-clockwise!
+    crossp = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    if crossp >= 0:
+        return True 
+    return False 
+
+def InTriangle(a, b, c, p):
+    L = [0, 0, 0]
+    eps = 0.0000001
+    # calculate barycentric coefficients for point p
+    # eps is needed as error correction since for very small distances denom->0
+    L[0] = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) \
+          /(((b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])) + eps)
+    L[1] = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) \
+          /(((b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])) + eps)
+    L[2] = 1 - L[0] - L[1]
+    # check if p lies in triangle (a, b, c)
+    for x in L:
+        if x >= 1 or x <= 0:
+            return False  
+    return True  
+
+def IsClockwise(poly):
+    # initialize sum with last element
+    sum = (poly[0][0] - poly[len(poly)-1][0]) * (poly[0][1] + poly[len(poly)-1][1])
+    # iterate over all other elements (0 to n-1)
+    for i in range(len(poly)-1):
+        sum += (poly[i+1][0] - poly[i][0]) * (poly[i+1][1] + poly[i][1])
+    if sum > 0:
+        return True
+    return False
+
+def GetEar(poly):
+    size = len(poly)
+    if size < 3:
+        return []
+    if size == 3:
+        tri = (poly[0], poly[1], poly[2])
+        del poly[:]
+        return tri
+    for i in range(size):
+        tritest = False
+        p1 = poly[(i-1) % size]
+        p2 = poly[i % size]
+        p3 = poly[(i+1) % size]
+        if IsConvex(p1, p2, p3):
+            for x in poly:
+                if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
+                    tritest = True
+            if tritest == False:
+                del poly[i % size]
+                return (p1, p2, p3)
+    print('GetEar(): no ear found')
+    return []
+
+def GetMinEar(poly): ### NEW NEW: Try to cut first ears with minimal length to avoid long edges from one vertex
+    size = len(poly)
+    if size < 3:
+        return []
+    if size == 3:
+        tri = (poly[0], poly[1], poly[2])
+        del poly[:]
+        return tri
+    mindist = 99999999 #New
+    minindex = None #New
+    for i in range(size):
+        tritest = False
+        p1 = poly[(i-1) % size]
+        p2 = poly[i % size]
+        p3 = poly[(i+1) % size]
+        if IsConvex(p1, p2, p3):
+            for x in poly:
+                if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
+                    tritest = True
+            if tritest == False:
+                if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist: #New
+                    mindist = distance(poly[(i-1) % size], poly[(i+1) % size]) #New
+                    minindex = i #New
+    if minindex == None: #New
+        print('GetEar(): no ear found')
+        return []
+    else: #NEW
+        i = minindex #this was index with minimal ear-edge-length
+        p1 = poly[(i-1) % size]
+        p2 = poly[i % size]
+        p3 = poly[(i+1) % size]
+        del poly[i % size]
+        return (p1, p2, p3)
+
+def earclipTrias(pts):  ###original name of function was triangulate
+    """
+    Split a convex, simple polygon into triangles, using earclipping algorithm.
+    Code literally copied from mrbaozi.
+    https://github.com/mrbaozi/triangulation and turned into a module.
+    
+    Parameters:
+        pts: a list of lists (of coordinates). E.g.
+          [[ 229.23,   78.21], [ 258.49,   17.23], [ 132.09,  -22.43], [ 107.97,   23.23]]
+           (note the last point isn't the first, it is assumed closed)
+    Returns:
+        A list of tuples. Each tuple contains three coordinates (representingone triangle)
+    """
+    tri = []
+    plist = pts[::-1] if IsClockwise(pts) else pts[:]
+    while len(plist) >= 3:
+        #first_point = plist[0] ### NEW: set first point to the end in order to not get all triangles in a convex part from one vertex; HOWEVER takes much longer
+        #plist = plist[1:]      ### NEW (above)     BETTER BUT NOT REALLY GOOD --> USE DELAUNEY TRIANGULATION
+        #plist.append(first_point)  ### NEW (above)                              --> SIMPLY by flipping edges after earclip??
+        #a = GetEar(plist)
+        a = GetMinEar(plist) #### NEW NEW: try to cut minimal ear edge length first  ############# TBD: ALTERNATIVE: looks better
+        if a == []:
+            break
+        if not IsClockwise(a): ###Not in original function; but we want only clockwise trias !!! ####
+            a = a[::-1]
+        tri.append(a)
+    return tri
