@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.1.4 exp
+# muxp_file.py    Version: 0.1.6 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -20,6 +20,7 @@
 #******************************************************************************
 
 #Change since 0.1.3: marked 3d coordinates as non swapped
+#Change since 0.1.4: Corrected eror to error in line 130
 
 from logging import getLogger
 from os import path, replace
@@ -127,7 +128,7 @@ def validate_muxp(d, logname):
     for mbv in MUST_BASE_VALUES:
         if mbv not in d:
             err  = "Must value {} missing in muxp-file.".format(mbv)
-            log.eror(err)
+            log.error(err)
             return -1, err
     ### REPLACE OPTIONAL VALUES BY "" IF NOT PRESENT
     for obv in OPTIONAL_BASE_VALUES:
