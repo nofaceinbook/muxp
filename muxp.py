@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.5 exp"
+muxp_VERSION = "0.1.6 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -25,6 +25,7 @@ muxp_VERSION = "0.1.5 exp"
 # Change since 0.1.3: updated spline definition by non swapped 3d coordinates
 # Change since 0.1.4: in CutSplineSegment calling createPolyTerrain with special method for segment_intervals
 #                     Correct handling when concave cutting polygon in PolyCutPoly (border_v are then anti_clockwise)
+# Change since 0.1.5: Renamed kml export files to have end 0 befor first command and number of command
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -349,8 +350,8 @@ class muxpGUI:
             ######## TBD: incl. road segments in kml and allow to show different polygons, points with different color settings ##########
             ######## TBD: incl. parameter which aspects like raster, roads etc. should be shown ##################
             kml_filename = self.runfile[:self.runfile.rfind('\\')+1] + update["tile"] + "_dsf"
-            log.info("Writing kml file before change to: {}".format(kml_filename + "_beforeMUXP.kml"))
-            kmlExport2(self.dsf, [areabound], a.atrias, kml_filename + "_beforeMUXP")
+            log.info("Writing kml file before change to: {}".format(kml_filename + "_0.kml"))
+            kmlExport2(self.dsf, [areabound], a.atrias, kml_filename + "_0")
 
 
         for c_index, c in enumerate(update["commands"]): #now go through all commands to update
@@ -396,7 +397,7 @@ class muxpGUI:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
                 shown_polys.append(c["coordinates"]) 
                 if self.kmlExport:
-                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
                     
             if c["command"] == "cut_flat_terrain_in_mesh":
                 polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
@@ -412,7 +413,7 @@ class muxpGUI:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
                 shown_polys.append(c["coordinates"]) 
                 if self.kmlExport:
-                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
                     
             if c["command"] == "cut_spline_segment":
                 log.info("Cuting segement as spline for following eleveation profile: {} m".format(c["3d_coordinates"]))
@@ -462,7 +463,7 @@ class muxpGUI:
                 #    shown_polys.append(pol)
                 shown_polys.append(segment_bound) 
                 if self.kmlExport:
-                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
                 ######### MAKE SURE THAT VERTICES ARE CREATED ON 5CM OPTION !!!!! ####################
                 
                     
@@ -490,7 +491,7 @@ class muxpGUI:
                         raster_bounds.append(raster_corners)
                         self.dsf.Raster[0].data[raster_index[0]][raster_index[1]] = c["elevation"]
                 if self.kmlExport:
-                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_cmd_{}".format(c_index))
+                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_{}".format(c_index+1))
                     
             if c["command"] == "update_raster4spline_segment":
                 log.info("CHANGING FOLLOWING RASTER SQUARES on segement for following eleveation profile: {} m".format(c["3d_coordinates"]))
@@ -513,7 +514,7 @@ class muxpGUI:
                             log.info("Set raster {} to elevation: {}m".format(raster_index, round(elev)))
                             break
                 if self.kmlExport:
-                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_cmd_{}".format(c_index))                        
+                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_{}".format(c_index+1))                        
 
         log.info("DSF vertices created with scaling: {}".format(elevation_scale))            
         a.createDSFVertices(elevation_scale)
