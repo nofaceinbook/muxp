@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.5 exp
+# muxp_math.py   Version: 0.1.6 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -24,8 +24,9 @@
 #Change since 0.1.3: Spline evaluation returns distance for error checking
 #Change since 0.1.4: Removed () around None for return value of intersection
 #                    Using new earclipping from mrbaozi directly inside this file
+#Change since 0.1.5: Addapting earclipping (select shortest ears with not maximal angele of trias)
 
-from math import sin, cos, atan2, sqrt, radians #for different calculations
+from math import sin, cos, atan2, acos, sqrt, radians, pi #for different calculations
 
 def _linsolve_(a1, b1, c1, a2, b2, c2):  
     divisor = (a1 * b2) - (a2 * b1)
@@ -308,6 +309,29 @@ def createFullCoords(x, y, t):
         v.append(t[2][i] + l0 * (t[0][i] - t[2][i])  + l1 * (t[1][i] - t[2][i]))
     return v
 
+def max_tria_angle(t):
+    """
+    Returns the maximum angle within tria t in range between 0 and 180 degrees.
+    """
+    def dotproduct(v1, v2):
+      return sum((a*b) for a, b in zip(v1, v2))
+    def length(v):
+      return sqrt(dotproduct(v, v))
+    def angle(v1, v2):
+        a = dotproduct(v1, v2) / (length(v1) * length(v2))
+        ### TBD: SOLVE ISSUES BY ROUNDING; NO NEED TO HAVE ANGEL VERY EXACT
+        if a > 1:
+            print("ERROR IN MAX TRIA ANGLE: VALUE FOR ACOS {} IS ABOVE 1".format(a))
+            a = 1
+        if a < -1:
+            print("ERROR IN MAX TRIA ANGLE: VALUE FOR ACOS {} IS BELOW -1".format(a))
+            a = -1            
+        return acos(a)
+    def vminus(v1, v2):
+        return [b-a for a, b in zip(v1, v2)]
+    return max(angle(vminus(v1, v0), vminus(v2, v0)) for v0, v1, v2 in [(t[0], t[1], t[2]), (t[1], t[0], t[2]), (t[2], t[1], t[0])]) * 180 / pi
+
+
 
 ############################### EARCLIPPING FUNCTIONS ########################
 #Code copied from mrbaozi (MIT license)
@@ -385,13 +409,14 @@ def GetMinEar(poly): ### NEW NEW: Try to cut first ears with minimal length to a
         p2 = poly[i % size]
         p3 = poly[(i+1) % size]
         if IsConvex(p1, p2, p3):
-            for x in poly:
-                if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
-                    tritest = True
-            if tritest == False:
-                if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist: #New
-                    mindist = distance(poly[(i-1) % size], poly[(i+1) % size]) #New
-                    minindex = i #New
+            if max_tria_angle([p1, p2, p3]) < 177: #New 2 --> avoid trias being just a line 
+                for x in poly:
+                    if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
+                        tritest = True
+                if tritest == False:
+                    if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist: #New
+                        mindist = distance(poly[(i-1) % size], poly[(i+1) % size]) #New
+                        minindex = i #New
     if minindex == None: #New
         print('GetEar(): no ear found')
         return []
