@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.1.5 exp
+# muxp_area.py    Version: 0.1.6 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -26,12 +26,13 @@
 #Changes from version 0.1.4: Updated CutPoly to handle also polygons that are completely inside one tria
 #                            Using new IsClockwise (instead is_clockwise) and earclipTrias (instead earclip) both now in muxp_math.py
 #                            Updated CreatPolyTerrain to have a method how triangulation is performed. Appart from earclip special method for segment_intervals introduced
+# Changes from version 0.1.5: CreatePolyTerrain sets now for newly generated vertices None for the original trias they are in (instead of -1). The None case is then treated in CreateDSFvertices.
+#                             Removed use of tripy (triangulation now in muxp_math)
 
 from xplnedsf2 import *
 from logging import getLogger
 from muxp_math import *
 from copy import deepcopy
-from tripy import *
     
 class muxpArea:
     
@@ -528,11 +529,12 @@ class muxpArea:
         for t in self.atrias:
             for vt in range(3): #all vertices of tria t 
                 count = 0 #counting how many coordinates are still the same as the referenced vertex in dsf
-                for vti in range(len(t[vt])):
-                    if t[vt][vti] != self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]:
-                        self.log.info("Reference for vertex {} not correct any more. {} differs to {}!".format(self.atrias.index(t), t[vt][vti], self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]))
-                        break
-                    count += 1
+                if t[vt+3][0] != None and t[vt+3][1] != None: #in case of completely new tria we have no previous vertices and new ones need to be created in any case
+                    for vti in range(len(t[vt])):
+                        if t[vt][vti] != self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]:
+                            self.log.info("Reference for vertex {} not correct any more. {} differs to {}!".format(self.atrias.index(t), t[vt][vti], self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]))
+                            break
+                        count += 1
                 if len(t[vt]) != count: #the reference for this vertex to the pool is not correct any more, new vertex needs to be inserted in dsf
                     v = deepcopy(t[vt]) #v has now deepcopy of all coordinates of that vertex that is to be inserted in the dsf
                     poolID4v = None #Searching for the pool ID for vertex v
@@ -587,7 +589,11 @@ class muxpArea:
                             self.log.error("DSF File already has maximum number of point pools. Addtional pools required for change can not be added!!!")
                             return -1
                         self.dsf.V.append([v])
-                        self.dsf.Scalings.append(deepcopy(self.dsf.Scalings[t[vt+3][0]])) #get scalings from the original tria vertex the new vertex is inside
+                        if t[vt+3][0] == None: #completele new tria in completely new patch, so no scaling available
+                            self.dsf.Scalings.append([deepcopy(self.dsf.Scalings[-1][0]), deepcopy(self.dsf.Scalings[-1][1]),deepcopy(self.dsf.Scalings[-1][2]),deepcopy(self.dsf.Scalings[-1][3]),deepcopy(self.dsf.Scalings[-1][4])]) ############## This is a dirty soltion --- TBD ###############
+                            ############################### BAD IMPLEMENTATION ABOVE #### Actually new scaling has to be defined based on area and typical s/t coordinates for that tile ##########################
+                        else:
+                            self.dsf.Scalings.append(deepcopy(self.dsf.Scalings[t[vt+3][0]])) #get scalings from the original tria vertex the new vertex is inside
                         ########## HOWEVER NEW VERTEX MIGHT BE OUTSIDE THESE SCALINGS --> check and adapt if required AFTER elevation was adapted as needed
                         if elevscal < 1: #for given submeter elevation pool-scaling has to be adapted
                             self.dsf.Scalings[-1][2][0] = 65535 * elevscal #new multiplier based on required scaling for elevation defined for new pool
@@ -712,7 +718,7 @@ class muxpArea:
                 new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0] #This version only creates simple vertices without s/t coordinates
                 #new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)  ## TBD: support s/t vertices via a given tria t that has maximum s/t coords at endpoint
                 ############# TBD: Elevation change probably not required here, because it will always be set via border vertices later ?!? #########################
-            self.atrias.append([new_v[0], new_v[1], new_v[2], [-1, -1], [-1, -1], [-1, -1], patchID])  #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
+            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])  #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
             
     def splitCloseEdges(self, v, mindist=0.1):
         """
