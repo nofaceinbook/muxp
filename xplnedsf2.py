@@ -45,6 +45,7 @@ else:
 
 class XPLNEpatch:
     def __init__(self, flag, near, far, poolIndex, defIndex):
+        ################# TBD: poolIndex not required, can be removed and defintion of poolIndex with first command can be done by trias2cmds as updated below ######################################
         self.flag = flag
         self.near = near
         self.far = far
@@ -95,8 +96,11 @@ class XPLNEpatch:
         return l
               
     def trias2cmds(self, trias): ############## UPDATE FOR MEXP to allow definition of own trias 
-        ### For the moment only uses single tirangle CMDS for different pools ## To be updeated 
-        self.cmds = [self.cmds[0]]
+        ### For the moment only uses single tirangle CMDS for different pools ## To be updeated
+        if len(self.cmds) > 0: ############### NEW 03.04.2020 ####################################
+            self.cmds = [self.cmds[0]] #just stay with pool defintion in first command
+        else: #first command not yet set
+            self.cmds = [[1, trias[0][0][0]]] #take pool from first vertex in first tria as first command to define pool
         i = 0 #counts number of trias
         c = [] #builds single commands
         for t in trias:
@@ -720,7 +724,10 @@ class XPLNEDSF:
                     ecmd += pack('<B', vlength) #count packed
                     while i < len(c): #now pack the variable length value list
                         for valtype in self._CMDStructure_[id][2]: #pack fixed length individual value
-                            ecmd += pack('<' + valtype, c[i])
+                            if valtype=='H' and (c[i]<0 or c[i]>65535):
+                                self._log_.error("Trying to pack value {} at position {} in command id {} as unsignded short. Skipped. DSF will not work!!!".format(c[i], i, id))
+                            else:
+                                ecmd += pack('<' + valtype, c[i])
                             i += 1
             else:
                 ######### TBD: include special code for CMD 14 here!!! ########## TBD ########### TBD ########### TBD ########### TBD ############### TBD ###########
