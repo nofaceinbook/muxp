@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.6 exp"
+muxp_VERSION = "0.1.7 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -26,6 +26,7 @@ muxp_VERSION = "0.1.6 exp"
 # Change since 0.1.4: in CutSplineSegment calling createPolyTerrain with special method for segment_intervals
 #                     Correct handling when concave cutting polygon in PolyCutPoly (border_v are then anti_clockwise)
 # Change since 0.1.5: Renamed kml export files to have end 0 befor first command and number of command
+# Change since 0.1.6: Added support of non default dsf mesh files + writing dsf original and backups and handling of conflcits with existing updates in dsf
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -38,7 +39,7 @@ from shutil import copy2
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
 from glob import glob #### NEEDED LATER TO SEARCH FOR DSF FILE ALSO IN Custom Scenery Folder
-from sys import argv
+from sys import argv, exit #### exit just for testing !!!####
 
 
 def displayHelp(win):
@@ -47,9 +48,10 @@ def displayHelp(win):
           "This program updates the mesh of X-Plane based on a configuration\n"
           "given in a text file (*.muxp). \n"
           "Via the config butten you set your X-Plane base folder and the folder\n"
-          "where the updated dsf files are stored. Make sure that this folder\n"
-          "has in the scenery_packs.ini file higher priority as other dsf mesh files\n"
-          "in order to make changes visible.\n\n"
+          "where the updated default dsf files are stored.\n"
+          "When updating meshes keep in mind that they are only visible when\n"
+          "the according scenery pack in the scenery_packs.ini has higher\n"
+          "priority than dsf mesh files in other scneery packs.\n\n"
           "MORE INFORMATION, source code and contact info are\n"
           "available at GitHub: https://github.com/nofaceinbook/muxp/\n\n"
           "Hope the tool helps you.    (c) 2020 by schmax (Max Schmidt)\n\n"
@@ -107,6 +109,8 @@ class muxpGUI:
         self.current_action = "none"  #e.g. set to read or write when operating on dsf file     
 
         self.dsf = XPLNEDSF(LogName, self.showProgress)  # includes all information about the read dsf-file
+        self.dsf_sceneryPack = "" #Name of the scenery Pack of dsf file to be processed
+        self.conflictStrategy = None #Strategy how to handle conflict with already existing updates in dsf-file
 
         self.header = Label(self.window, text="WARNING - This is still a test version.")
         self.header.grid(row=0, column=0, columnspan=2)
@@ -140,13 +144,14 @@ class muxpGUI:
         error = self.getConfig(runfile)
         if error: #in case of config error, config has to be defined
             displayNote(self.window, "Configuration file 'muxp.config' not found (check muxp.log) or\nyou are starting muxp the first time.\n\n" +
-                                     "When you start muxp the first time you need to set X-Plane folder and \na folder for the updated dsf files.\n" +
-                                     "This folder needs to be your 'Custom Scenery' folder of X-Plane.\nYou can also choose to generate a new folder 'zmuxp mesh updates'.\n" +
-                                     "Only mesh whith lower priority as this file in 'scenery_packs.ini'\ncan be seen after update.\n\n" +
-                                     "IMPORTANT: This tool is in an early development stage.\n                       All you are doing you do on your own risk!")
+                                     "When you start muxp the first time you need to set X-Plane folder and \na folder for the updated default dsf files.\n" +
+                                     "This folder needs to be inside your 'Custom Scenery' folder of X-Plane.\nYou can also choose to generate a new folder\n"
+                                     "like 'zzzz_muxp_default_mesh_updates'.\n" +
+                                     "Very low priority in 'scenery_packs.ini' is sufficient, as it is only \nused for replacing default scenery.\n\n" +
+                                     "IMPORTANT: This tool is in an early development stage.\n                       All you are doing, you do on your own risk!")
             self.ConfigMenu()
         else:
-            if muxpfile != None: #if muxpfile was given          
+            if muxpfile != None: #if muxpfile was given
                 error = self.runMuxp(muxpfile) #directly run muxpfile if it was given as argument
         if muxpfile == None or error: #program that was run directly, terminates directly in case of no errors
             mainloop()
@@ -216,7 +221,7 @@ class muxpGUI:
 
 
     def create_muxpfolder(self, xpfolder, info_label, muxpfolder_entry):
-        muxp_scenery = "Custom Scenery/zMUXP_mesh_updates"
+        muxp_scenery = "Custom Scenery/zzzz_MUXP_default_mesh_updates"
         inifile = xpfolder + "/Custom Scenery/scenery_packs.ini"
         inicopy = xpfolder + "/Custom Scenery/scenery_packs.beforeMUXP"
         new_infile = []
@@ -313,17 +318,118 @@ class muxpGUI:
             f.write("kmlExport:  {}\n".format(self.kmlExport))
 
 
+    def SelectDSF(self, scenery_packs):
+        """
+        Shows windows with all sceneries in scenery_packs dict
+        and waits until usere has selected on scenery in listbox.
+        Selected scenery is stored in self.dsf_sceneryPack (relative to xp_folder).
+        """
+        def done(scenlist, infolabel):
+            ids = scenlist.curselection()
+            if len(ids) == 0:
+                infolabel.config(text = "One scenery need to be selected!") 
+            else:
+                selected_secenery = scenlist.get(ids)
+                selected_secenery = selected_secenery[selected_secenery.find(":")+2:]
+                self.dsf_sceneryPack = selected_secenery
+        selectDSFwin = Toplevel(self.window)
+        selectDSFwin.attributes("-topmost", True)
+        topinfo = Label(selectDSFwin, text="Select DSF File to update:")
+        topinfo.grid(row=0, column=0)
+        listbox = Listbox(selectDSFwin, width=80)
+        listbox.grid(row=1, column=0, columnspan=3)
+        for item in scenery_packs.keys():
+            listbox.insert(END, scenery_packs[item] + ": " + item )
+        buttoninfo = Label(selectDSFwin, text="Important: When not selecting new or active dsf make sure that you re-arange\n"
+                                              "           scenery_packs.ini in order that update becomes visible in X-Plane!\n"
+                                              "Press OK after selection.")
+        buttoninfo.grid(row=2, column=0)
+        okbutton = Button(selectDSFwin, text='  OK  ', command = lambda: done(listbox, buttoninfo)) 
+        okbutton.grid(row=3, column=1)
+        while self.dsf_sceneryPack == "": #wait until selection is done
+            selectDSFwin.update()
+        selectDSFwin.destroy()
+
+        
+    def handleMUXPconflicts(self, filename, update):
+        """
+        Checks if there are conflicts for the dsf file like overlapping
+        areas and performing same update again on the dsf file.
+        Offers to perform changes on orignial file or on backup.
+        Returns the filename the user has finally decided to update.
+        """
+        def done(choice):
+            self.conflictStrategy = choice
+
+        filenames = [filename, filename+".muxp.backup", filename+".muxp.original"] #current dsf file, backup dsf file, original dsf file
+        issues = ["None", "None", "None"] #assume no issues for files; issues are strings
+        props = [None, None, None]
+        muxes = ["", "", ""] #included muxp defintions are collected as strings
+        if filename.find(self.muxpfolder) == 0: #selected file is in muxpfolder
+            filenames[2] = self.xpfolder + "/Global Scenery/X-Plane 11 Global Scenery" + filename[-35:] #then orignial dsf is in global scenery --> should just take the relevant bytes identical in Global Scenery #### TO BE TESTED #####
+        for i,f in enumerate(filenames): ### TBD: Define all file extensions AND directory names globally
+            log.info("Evaluating conflicts for: {} {}".format(i, f))
+            if path.exists(f):
+                props[i] = getDSFproperties(f)
+                for mdef in getMUXPdefs(props[i]):
+                    muxes[i] += "     muxpID: {} version: {} area: {}\n".format(mdef[0], mdef[1], mdef[2])
+                if areaIntersectionInProps(update['area'], props[i]) != None:
+                    issues[i] = "DSF file already updated in area of muxp file."
+                if updateAlreadyInProps(update['id'], props[i]) != None:
+                    issues[i] = "DSF file already includes this update" ##overwrites issue intersection, as this is even worse
+            else:
+                issues[i] = "File does not exist!"
+            if i==0 and issues[0] == "None": return filename #in case of no issues of current file nothing to do, just stay with current file to be updated
+        conflictwin = Toplevel(self.window)
+        conflictwin.attributes("-topmost", True)
+        topinfo = Label(conflictwin, anchor='w', justify=LEFT, text="The DSF file you want to update was already updated in a way that may conflict witht current update.\n"
+                                                  "You should think of applying the upadte to un-muxed dsf file. How do you want to proceed?\n Update details  " +
+                                                  "id: " + update["id"] + "  version: " + update["version"] + "  area: {} ".format(update["area"]))
+        topinfo.grid(row=0, column=0, columnspan=3)
+        scenerylabel = [None, None, None]
+        scenerybutton = [None, None, None]
+        Label(conflictwin, text="================================================================================").grid(column=0, row=1, columnspan=3)
+        for i,dsftype in enumerate(["CURRENT", "BACKUP", "ORIGINAL"]):
+            scenerylabel[i] = Label(conflictwin, anchor='w', justify=LEFT, text=dsftype+" DSF FILE:\n   filename: "+filenames[i]+"\n   issue: " + issues[i] + "\n   Included mesh updates:\n" + muxes[i])
+            scenerylabel[i].grid(row=2*i+2, column=0, columnspan=2)
+            scenerybutton[i] = Button(conflictwin, text=' Update ', command = lambda: done(dsftype)) #### TBD: Colors based on issue ####
+            scenerybutton[i].grid(row=2*i+2, column=2)
+            Label(conflictwin, text="================================================================================").grid(column=0, row=2*i+3, columnspan=3)
+            if issues[i] == "File does not exist!":
+                scenerybutton[i].config(state='disabled')
+            elif issues[i].find("include") >= 0:
+                scenerybutton[i].config(bg='red')
+            elif issues[i].find("area") >= 0:
+                scenerybutton[i].config(bg='yellow')
+            else:
+                scenerybutton[i].config(bg='green')
+
+        buttoninfo = Label(conflictwin, text="Select which dsf file you want to update or press Cancel.\n"
+                                             "Note: Original dsf will never be overwritten, but current is OVERWRITTEN with new version.")
+        buttoninfo.grid(row=8, column=0, columnspan=3)
+        cancelbutton = Button(conflictwin, text='  CANCEL  ', command = lambda: done("CANCEL")) 
+        cancelbutton.grid(row=9, column=1)
+        while self.conflictStrategy == None: #wait until selection is done
+            conflictwin.update()
+        conflictwin.destroy()
+        if self.conflictStrategy == "CURRENT": return filenames[0]
+        if self.conflictStrategy == "BACKUP": return filenames[1]
+        if self.conflictStrategy == "ORIGINAL": return filenames[2]
+        if self.conflictStrategy == "CANCEL": return None
+        
+  
     def runMuxp(self, filename):
         """
-        Updates the mesh based on the muxp file.
+        Initiates updating the mesh based on the muxp file (filename).
         """
+        ############# READ AND EVALUATE MUXP FILE #####################
         update, error = readMuxpFile(filename, LogName)
         if update == None:
             self.muxp_status_label.config(text="muxp-file ERROR")
             self.info_label.config(text="MUXP-file {} not found.".format(filename))
             log.error("MUXP-file {} not found.".format(filename))
             return -1
-        error, resultinfo = validate_muxp(update, LogName) ### tbd: check if all relevant values are in and transform all values
+        error, resultinfo = validate_muxp(update, LogName) 
         log.info("Command Dictionary: {}".format(update))
         if error: #positive values mean that processing can still be performed
             displayNote(self.window, resultinfo + "\nCheck muxp.log for details.")
@@ -332,13 +438,91 @@ class muxpGUI:
             self.info_label.config(text="Validation Error Code {}. Refer muxp.log for details.".format(error))
             return -2
         log.info("muxpfile id: {} version: {} for area:{} with {} commands read.".format(update["id"], update["version"], update["area"], len(update["commands"])))
-        log.info("This muxp version only changes default XP mesh....")
-        #################### tbd: check for other dsf file as hd-mesh etc. in Custom scenery and use the dsf that is loaded to XPlane #################
+        
+        ############### SEARCH AND READ DSF FILE TO ADAPT ######################
+        self.muxp_status_label.config(text = "Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
         self.muxp_start.config(state="disabled")
-        filename = self.xpfolder +  "/Global Scenery/X-Plane 11 Global Scenery/Earth nav data/" + get10grid(update["tile"][:3]) + get10grid(update["tile"][3:]) + "/" + update["tile"] +".dsf"
-        log.info("Loading dsf file {}".format(filename))
+        self.window.update()
+        scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder)
+        self.SelectDSF(scenery_packs)
+        dsf_output_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf" #this is default dsf filename name for scenery pack
+            ### WARNING: In case of default mesh, the dsf_output_filname needs to be changed to the one in muxpfolder (done below)
+        #if self.dsf_sceneryPack.find("X-Plane 11 Global Scenery") >= 0:
+        #    log.info("Default mesh was selected to be updated. No need to check for conflicts.")
+        #    dsf_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"
+        #    dsf_output_filname = dsf_filename
+        dsf_filename = self.handleMUXPconflicts(dsf_output_filename, update) #Check for conflicts with existing mesh updates in dsf; might result in an other dsf-file to be processed
+        if self.conflictStrategy == "CANCEL":
+            log.info("CANCEL was chosen in conflict handling.")
+            exit(0)
+        log.info("Conflict Strategy {} resulting in follwing dsf file to adapt: {}".format(self.conflictStrategy, dsf_filename))
+        if dsf_filename.find("X-Plane 11 Global Scenery") >= 0: #X-Plane default scenery selected  ### TBD: Define String globally to be replaced if it changes #####
+            log.info("Adapting default scenery which will then be available in defined muxp folder.")
+            self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery" #make sure that really the right pack is set
+            dsf_output_filename = self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"
+        else:
+            log.info("Adapting Custom Scenery  ....")
+            if not path.exists(dsf_output_filename + ".muxp.original"): #make sure that the original is saved
+                log.info("There is currently no copy of original dsf file available. Generating Copy: {}".format(dsf_output_filename + ".muxp.original"))
+                copy2(dsf_filename, dsf_output_filename + ".muxp.original")
+        log.info("Loading dsf file {}".format(dsf_filename))
         self.current_action = "read"
-        self.dsf.read(filename)
+        self.dsf.read(dsf_filename)
+        
+        ############## START PROCESSING MUXP FILE ON DSF FILE ################
+        muxp_process_error = self.processMuxp(dsf_filename, update)  ### Returns return value of processing
+        if muxp_process_error:
+            return muxp_process_error #No writing of dsf file in case of error
+
+        ########## UPDATE PROPERTIES OF DSF ACCORDING TO PROCESSED MUXP FILE #############
+        #currentDSFisUNMUXED = False
+        if "muxp/HashDSFbaseFile" not in self.dsf.Properties: #store the file hash of the base dsf file 
+            self.dsf.Properties["muxp/HashDSFbaseFile"] = str(self.dsf.FileHash)
+            #### OPTION: write hex-presentation instead binary string to dsf with binascii.b2a_hex ###
+            #currentDSFisUNMUXED = True
+        update_number = 0 
+        for props in self.dsf.Properties: #check for alread included updates in dsf and find highest number
+            if props.startswith("muxp/update/"):
+                update_number_read = int(props[12:])
+                if update_number_read > update_number:
+                    update_number = update_number_read
+        update_prop_key = "muxp/update/{}".format(str(update_number + 1)) #next number for new update, start with 1
+        #For each update dsf will include property key 'muxp/update/number' with value 'update_id/update_version/updated_area'
+        self.dsf.Properties[update_prop_key] = "{}/{}/{} {} {} {}".format(update["id"],update["version"], update["area"][0], update["area"][1], update["area"][2], update["area"][3])
+        log.info("Updated dsf.Properties: {}".format(self.dsf.Properties))
+        self.current_action = "write"
+        
+        ################ CREATE BACKUP FROM CURRENT DSF BEFORE WRITING #################
+        if path.exists(dsf_output_filename): #only make backup if file exists
+            copy2(dsf_output_filename, dsf_output_filename+".muxp.backup")
+        
+        ############## CHECK WRITE LOCATION AND WRITE UPDATED DSF FILE ##################
+        if dsf_filename.find("X-Plane 11 Global Scenery") >= 0: #X-Plane default scenery selected, so file need to be written to muxp Folder
+            #Check that all required folders for writing updated dsf to muxp folder do exist and create if missing
+            if not path.exists(self.muxpfolder):
+                log.error("muxpfolder for saving dsf updates does not exisit: {}".format(self.muxpfolder))
+                self.muxp_status_label.config(text="muxp-folder ERROR")
+                self.info_label.config(text="muxpfolder {} not existing.".format(self.muxpfolder))
+                return -70 #error
+            if not path.exists(self.muxpfolder + "/Earth nav data"):
+                mkdir(self.muxpfolder + "/Earth nav data")
+                log.info("Created 'Earth nav data' folder in: {}".format(self.muxpfolder))
+            writefolder = self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"]) 
+            if not path.exists(writefolder):
+                mkdir(writefolder)
+                log.info("Created new 10grid folder in muxpfolder: {}".format(writefolder))
+            #dsf_output_filename = writefolder + "/" + update["tile"] +".dsf" ## already set above
+        log.info("Wrting updated dsf file to: {}".format(dsf_output_filename))
+        self.dsf.write(dsf_output_filename)   ### TBD: Error checking if writing fails ################
+        return 0 #processed muxp without error    
+        
+    def processMuxp(self, filename, update):
+        """
+        Adapts the self.dsf according the muxp commands stored in update dict.
+        """
+        #log.info("Loading dsf file {}".format(filename))
+        #self.current_action = "read"
+        #self.dsf.read(filename)
         a = muxpArea(self.dsf, LogName)
         a.extractMeshArea(*update["area"])
         elevation_scale = 1 ### IMPORTANT: When command set sub-meter vertices this scale has to be adapted
@@ -519,37 +703,7 @@ class muxpGUI:
         log.info("DSF vertices created with scaling: {}".format(elevation_scale))            
         a.createDSFVertices(elevation_scale)
         a.insertMeshArea()
-        if "muxp/HashDSFbaseFile" not in self.dsf.Properties: #store the file hash of the base dsf file 
-            self.dsf.Properties["muxp/HashDSFbaseFile"] = str(self.dsf.FileHash)
-            #### OPTION: write hex-presentation instead binary string to dsf with binascii.b2a_hex ###
-        update_number = 0 
-        for props in self.dsf.Properties: #check for alread included updates in dsf and find highest number
-            if props.startswith("muxp/update/"):
-                update_number_read = int(props[12:])
-                if update_number_read > update_number:
-                    update_number = update_number_read
-        update_prop_key = "muxp/update/{}".format(str(update_number + 1)) #next number for new update, start with 1
-        #For each update dsf will include property key 'muxp/update/number' with value 'update_id/update_version/updated_area'
-        self.dsf.Properties[update_prop_key] = "{}/{}/{} {} {} {}".format(update["id"],update["version"], update["area"][0], update["area"][1], update["area"][2], update["area"][3])
-        log.info("Updated dsf.Properties: {}".format(self.dsf.Properties))
-        self.current_action = "write"
-        #Check that all required folders for writing updated dsf do exist and create if missing
-        if not path.exists(self.muxpfolder):
-            log.error("muxpfolder for saving dsf updates does not exisit: {}".format(self.muxpfolder))
-            self.muxp_status_label.config(text="muxp-folder ERROR")
-            self.info_label.config(text="muxpfolder {} not existing.".format(self.muxpfolder))
-            return -70 #error
-        if not path.exists(self.muxpfolder + "/Earth nav data"):
-            mkdir(self.muxpfolder + "/Earth nav data")
-            log.info("Created 'Earth nav data' folder in: {}".format(self.muxpfolder))
-        writefolder = self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"][:3]) + get10grid(update["tile"][3:])
-        if not path.exists(writefolder):
-            mkdir(writefolder)
-            log.info("Created new 10grid folder in muxpfolder: {}".format(writefolder))
-        self.dsf.write(writefolder +  "/" + update["tile"] +".dsf")
-        #self.current_action = "read"  #---> Reading can be used for testing
-        #self.dsf.read(writefolder +  "/" + update["tile"] +".dsf") #---> Reading can be used for testing
-        return 0 #processed muxp without error
+
 
     
 ########### MAIN #############
