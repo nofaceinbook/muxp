@@ -1,6 +1,6 @@
 #******************************************************************************
 #
-# xplnedsf2.py        Version 0.5.5  for muxp
+# xplnedsf2.py        Version 0.5.6  for muxp
 # ---------------------------------------------------------
 # Python module for reading and writing X_Plane DSF files.
 #
@@ -26,6 +26,8 @@
 
 ### NEW 0.5.4: Encoding PORP Atom, correct decoding of V32 pools/scaling using
 ###            correct max_int for modulo unwrapping, and encoding 32bit pools
+### NEW 0.5.6: Added separate function isDSFoverlay(file) to test whether a dsf file is an overlay
+###            Checking out of bound when packing raster values (might be removed again!)
 
 from os import path, stat #required to retrieve length of dsf-file
 from struct import pack, unpack #required for binary pack and unpack
@@ -558,9 +560,24 @@ class XPLNEDSF:
             for y in range(R.height): #going x-wise from east to west just the bytes per pixes ################# YYYYYYY
                 line = b'' #current encoded bytes just for one line; this is quick enough wiht +=, then extend lines to encdata
                 for x in range(R.width): #going y-wise from south to north, always jumping over the width of each x-line ################## XXXXXX
-                    v = R.data[x][y] / R.scale - R.offset # APPLYING SCALE + OFFSET to raster elevation at position x, y
+                    #v = R.data[x][y] / R.scale - R.offset # APPLYING SCALE + OFFSET to raster elevation at position x, y
+                    v = (R.data[x][y] - R.offset) / R.scale # APPLYING SCALE + OFFSET to raster elevation at position x, y  ## corrected 26.04.2020
                     if R.flags & 1 or R.flags & 2: #integers to be read
                         v = int(v)
+                        if ctype == '<H': ##  check here out of bound values  ###### NEW 26.04.2020 ######
+                            if v < 0:
+                                self._log_.error("Raster elevation at position {} {} is negative: {} ({})---> set to 0".format(x, y, v, ctype))
+                                v = 0
+                            if v > 65535:
+                                self._log_.error("Raster elevation at position {} {} is above 65535: {} ({}) ---> set to 65535".format(x, y, v, ctype))
+                                v = 65535
+                        if ctype == '<h': ##  check here out of bound values  ###### NEW 26.04.2020 ######
+                            if v < -32768:
+                                self._log_.error("Raster elevation at position {} {} is below -32768: {} ({})---> set to -32768".format(x, y, v, ctype))
+                                v = -32768
+                            if v > 32767:
+                                self._log_.error("Raster elevation at position {} {} is above 32767: {} ({}) ---> set to 32767".format(x, y, v, ctype))
+                                v = 32767
                     ##### TBD: check if v is not negative for signed integer and if size for packing is according....
                     line += pack(ctype, v) #pack bytes for position x, y of raster
                 encdata.extend(line)
@@ -1033,3 +1050,92 @@ class XPLNEDSF:
         self._log_.info("Finshed writing dsf-file.")
         return 0
 
+
+"""
+#### FOLLOWING FUNCTION PROBABLY NOT NEEDED, TO BE REMOVED IN NEXT RELEASE ######
+def isDSFoverlay(file):
+  
+    #This function checks if the dsf file includes the sim/overlay flag in
+    #Properties and returns True if this is a case and False otherwise.
+    #In case of errors, string with error description is returned.
+
+    if not path.isfile(file):
+        return "ERROR in isDSFoverlay: File {} does not exist!".format(file)
+    flength = stat(file).st_size #length of dsf-file   
+    with open(file, "rb") as f:    ##Open Tile as binary fily for reading
+        start = f.read(12)
+        if start.startswith(b'7z\xBC\xAF\x27\x1C'):
+            if PY7ZLIBINSTALLED:
+                f.seek(0)
+                archive = py7zlib.Archive7z(f)
+                filedata = archive.getmember(archive.getnames()[0]).read()
+                f.close()
+                f = BytesIO(filedata)
+                flength = len(filedata) #also update to decompressed length
+                start = f.read(12)
+            else:
+                return "ERROR in isDSFoverlay: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
+        identifier, version = unpack('<8sI',start)
+        if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
+            return "ERROR in isDSFoverlay: File {} is no X-Plane dsf-file Version 1!".format(file)  
+        while f.tell() < flength - 16: #read chunks until reaching last 16 bytes hash value
+            bytes = f.read(8)
+            atomID, atomLength = unpack('<4sI',bytes)
+            atomID = atomID.decode("utf-8")
+            bytes = f.read(atomLength-8)   ##Length includes 8 bytes header
+
+            if atomID == "DAEH":
+                if bytes.find(b'sim/overlay\x001') > 0:
+                    return True
+                else:
+                    return False
+    return "ERROR in isDSFoverlay: File {} does not have an HEADER atom; no vaild dsf file!".format(file)
+"""
+                    
+def getDSFproperties(file):
+    """
+    This function returns the properties of a dsf file as dict.
+    """
+    if not path.isfile(file):
+        return "ERROR in getDSFproperties: File {} does not exist!".format(file)
+    flength = stat(file).st_size #length of dsf-file   
+    with open(file, "rb") as f:    ##Open Tile as binary fily for reading
+        start = f.read(12)
+        if start.startswith(b'7z\xBC\xAF\x27\x1C'):
+            if PY7ZLIBINSTALLED:
+                f.seek(0)
+                archive = py7zlib.Archive7z(f)
+                filedata = archive.getmember(archive.getnames()[0]).read()
+                f.close()
+                f = BytesIO(filedata)
+                flength = len(filedata) #also update to decompressed length
+                start = f.read(12)
+            else:
+                return "ERROR in getDSFproperties: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
+        identifier, version = unpack('<8sI',start)
+        if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
+            return "ERROR in getDSFproperties: File {} is no X-Plane dsf-file Version 1!".format(file)
+        inHeader = False # Flag when inside Header atom of atoms
+        props_dict = dict() #dictionary with properties to be returned
+        while f.tell() < flength - 16: #read chunks until reaching last 16 bytes hash value
+            bytes = f.read(8)
+            atomID, atomLength = unpack('<4sI',bytes)
+            atomID = atomID.decode("utf-8")
+            if atomID == "DAEH":
+                inHeader = True
+            elif inHeader and atomID == "PORP":
+                bytes = f.read(atomLength-8)
+                x=bytes.split(b'\x00')
+                for i in range(0,len(x)-1,2):
+                    props_dict[x[i].decode("utf-8")]=x[i+1].decode("utf-8")
+                return props_dict
+                start = 0 #position when going through bytes
+                while bytes.find(b'\x00',start) >= 0:
+                    next = bytes.find(b'\x00',start)
+                    end = bytes.find(b'\x00',next+1)
+                    props_dict[bytes[start:next].decode("utf-8")] = bytes[next+1:end].decode("utf-8")       ###### l.append(atom[i:j].decode("utf-8"))
+                    start = end+1
+                return props_dict    
+            else:
+                bytes = f.read(atomLength-8)   ##Continue reading, Length includes 8 bytes header
+    return "ERROR in getDSFproperties: File {} does not have an HEADER/PROPERTIES atom; no vaild dsf file!".format(file)
