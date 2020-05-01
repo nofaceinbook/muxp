@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.6 exp
+# muxp_math.py   Version: 0.1.7 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -24,7 +24,9 @@
 #Change since 0.1.3: Spline evaluation returns distance for error checking
 #Change since 0.1.4: Removed () around None for return value of intersection
 #                    Using new earclipping from mrbaozi directly inside this file
-#Change since 0.1.5: Addapting earclipping (select shortest ears with not maximal angele of trias)
+#Change since 0.1.5: Adapting earclipping (select shortest ears with not maximal angele of trias)
+#Change since 0.1.6: Adapted earclipping agin: Miniear only takes ears with not mximial angle if such trias exist
+#                    Added function doBoundingRectanglesIntersect
 
 from math import sin, cos, atan2, acos, sqrt, radians, pi #for different calculations
 
@@ -134,6 +136,21 @@ def BoundingRectangle(vertices, borderExtension=0.0001):
             maxy = v[1]
     return miny-borderExtension, maxy+borderExtension, minx-borderExtension, maxx+borderExtension
 
+def doBoundingRectanglesIntersect(r, s):
+    """
+    Returns True if two bounding rectangles r, s as 4-tuple of (latS, latN, lonW, lonE)
+    and False otherwise.
+    """
+    #are corners of s inside r then we have intersection
+    if r[0] <= s[0] <= r[1] and r[2] <= s[2] <= r[3]: return True
+    if r[0] <= s[0] <= r[1] and r[2] <= s[3] <= r[3]: return True
+    if r[0] <= s[1] <= r[1] and r[2] <= s[2] <= r[3]: return True
+    if r[0] <= s[1] <= r[1] and r[2] <= s[3] <= r[3]: return True
+    #so either r and s are distinct or r is completely in s
+    if s[0] <= r[0] <= s[1] and s[2] <= r[2] <= s[3]:
+        return True
+    else:
+        return False
 
 def segmentToBox (p1, p2, w):
     """
@@ -403,30 +420,37 @@ def GetMinEar(poly): ### NEW NEW: Try to cut first ears with minimal length to a
         return tri
     mindist = 99999999 #New
     minindex = None #New
+    fallback = None #New3 Have tria in case no tria is fulfilling max angle requirement
     for i in range(size):
         tritest = False
         p1 = poly[(i-1) % size]
         p2 = poly[i % size]
         p3 = poly[(i+1) % size]
         if IsConvex(p1, p2, p3):
-            if max_tria_angle([p1, p2, p3]) < 177: #New 2 --> avoid trias being just a line 
+            #if max_tria_angle([p1, p2, p3]) < 177: #New 2 --> avoid trias being just a line 
                 for x in poly:
                     if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
                         tritest = True
                 if tritest == False:
                     if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist: #New
                         mindist = distance(poly[(i-1) % size], poly[(i+1) % size]) #New
-                        minindex = i #New
+                        fallback = i #New3
+                        if max_tria_angle([p1, p2, p3]) < 177: #New 3
+                            minindex = i #New3
+                        
     if minindex == None: #New
-        print('GetEar(): no ear found')
-        return []
-    else: #NEW
-        i = minindex #this was index with minimal ear-edge-length
-        p1 = poly[(i-1) % size]
-        p2 = poly[i % size]
-        p3 = poly[(i+1) % size]
-        del poly[i % size]
-        return (p1, p2, p3)
+        if fallback != None: #New3
+            minindex = fallback #New3
+        else: #New3
+            print('GetEar(): no ear found')
+            return []
+    #NEW 3: below un-indented
+    i = minindex #this was index with minimal ear-edge-length
+    p1 = poly[(i-1) % size]
+    p2 = poly[i % size]
+    p3 = poly[(i+1) % size]
+    del poly[i % size]
+    return (p1, p2, p3)
 
 def earclipTrias(pts):  ###original name of function was triangulate
     """
