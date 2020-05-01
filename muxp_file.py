@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.1.6 exp
+# muxp_file.py    Version: 0.1.7 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -21,9 +21,13 @@
 
 #Change since 0.1.3: marked 3d coordinates as non swapped
 #Change since 0.1.4: Corrected eror to error in line 130
+#Change since 0.1.6: Added function findDSFmeshFiles
+#                    Added function to retrieve and evalute dsf properties
 
 from logging import getLogger
-from os import path, replace
+from os import path, replace, walk
+from xplnedsf2 import getDSFproperties  ## isDSFoverlay not needed any more
+from muxp_math import doBoundingRectanglesIntersect
 
 def readMuxpFile(filename, logname):
     log = getLogger(logname + "." + __name__) #logging based on pre-defined logname
@@ -270,35 +274,127 @@ def validate_muxp(d, logname):
     else:
         return 0, "MUXP file read without errors and warnings."
                     
-    """    
-    ### Extract and validate commands
-    for i, c in enumerate(d["commands"]):
-        if "coordinates" in c:
-            for j, coord in enumerate(c["coordinates"]):
-                d["commands"][i]["coordinates"][j] = [float(coord[1]), float(coord[0])] #swap from lon/lat to x,y
-                ##### TBD: Check that really two floats
-        if "3d_coordinates" in c:
-            for j, coord in enumerate(c["3d_coordinates"]):
-                d["commands"][i]["3d_coordinates"][j] = [float(coord[1]), float(coord[0]), float(coord[2])] #swap from lon/lat to x,y
-        if "elevation" in c:
-            d["commands"][i]["elevation"] = float(c["elevation"])  
-    """
-
     return None  #No error               
     
- 
-
         
 def get10grid(tile):
     """
-    returns for a tile definition string like -122 or +47 the 10 rounded string -130 or +40 
+    returns for a tile definition string like -122+47 the 10 rounded string -130+40 
     """
-    if tile[0] == '-':
-        s = 5
-    else:
-        s = 4.99
-    if len(tile) == 3:
-        return "{0:+03d}".format(round((int(tile)-s)/10)*10)
-    else:
-        return "{0:+04d}".format(round((int(tile)-s)/10)*10)
+    grid10 = ""
+    for tile_part in [tile[:3], tile[3:]]:
+        if tile_part[0] == '-':
+            s = 5
+        else:
+            s = 4.99
+        if len(tile_part) == 3:
+            grid10 += "{0:+03d}".format(round((int(tile_part)-s)/10)*10)
+        else:
+            grid10 += "{0:+04d}".format(round((int(tile_part)-s)/10)*10)
+    return grid10
+        
+
+def findDSFmeshFiles(tile, xpfolder):
+    """
+    This function returns dictionary of all dsf files that include a mesh.
+    It searches in the X-Plane folder in Custom and Global Scenery.
+    The key of the dict is the path from xpfolder to the scenery pack and
+    then value is type of ACTIVE (topmost in scenery_packs.ini), PACK, DEFAULT,
+    DISABLED, NEW (not in scenery_paxcks.ini yet).
+    """
+    inifile = xpfolder + "/Custom Scenery/scenery_packs.ini"
+    grid10 = get10grid(tile)
     
+    packs = dict() #dictionary of scenery packs with key of pack as name and type as value
+
+    ########## TBD: Define all such folders as global variable to be easily changable ###############
+    if path.exists(xpfolder +  "/Global Scenery/X-Plane 11 Global Scenery/Earth nav data/" + grid10 + "/" + tile + ".dsf"):  
+        packs["Global Scenery/X-Plane 11 Global Scenery"] = "DEFAULT"
+
+    for (_, dirs, _) in walk(xpfolder+"/Custom Scenery/"):
+        break
+    
+    for scenery in dirs:
+        dsf_file = xpfolder + "/Custom Scenery/" + scenery + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"
+        if path.exists(dsf_file):
+            props = getDSFproperties(dsf_file)
+            if not 'sim/overlay' in props.keys():
+            #if not isDSFoverlay(dsf_file): ### OLDER FUNCTION, TO BE REMOVED
+                packs["Custom Scenery/"+scenery] = "New" #for the moment each found scenery is new
+            elif props["sim/overlay"] == '0': #In case such a definition would exist.....
+                packs["Custom Scenery/"+scenery] = "New" #for the moment each found scenery is new
+    
+    if not path.exists(inifile):
+        return packs #Without inifile all packs are returned as New
+                
+    active_pack_found = False            
+    with open(inifile, encoding="utf8", errors="ignore") as f:
+        for line in f:
+            if line.startswith("SCENERY_PACK_DISABLED"):
+                scenery = line[line.find(" ")+1:-2]
+                if scenery in packs.keys():
+                    packs[scenery] = "DISABLED"                  
+            elif line.startswith("SCENERY_PACK"):
+                scenery = line[line.find(" ")+1:-2]
+                if scenery in packs.keys():
+                    if not active_pack_found:
+                        packs[scenery] = "ACTIVE"
+                        active_pack_found = True
+                    else:
+                        packs[scenery] = "PACK"
+
+    sorted_packs = dict()
+    for scentype in ["ACTIVE", "PACK", "DEFAULT", "DISABLED"]:
+        for scen in packs.keys():
+            if packs[scen] == scentype:
+                sorted_packs[scen] = scentype        
+                
+    return sorted_packs
+
+def getMUXPdefs(props):
+    """
+    Return the muxp defintions in DSF properties as array.
+    """
+    muxes = []
+    i = 1
+    while ("muxp/update/"+str(i) in props.keys()):
+        id, version, area = props["muxp/update/"+str(i)].split('/')
+        a = area.split()
+        for j in range(len(a)):
+            a[j] = float(a[j])
+        muxes.append([id, version, a])
+        i += 1
+    return muxes
+
+def updateAlreadyInProps(update_id, props):
+    """
+    Checks wheter an muxp update (given as id string) is in the properties
+    (given as dict) of an dsf file. If it is in the update the version
+    of the update in the props is returned, if not None.
+    """
+    i = 1
+    while ("muxp/update/"+str(i) in props.keys()):
+        if props["muxp/update/"+str(i)].find(update_id) == 0:
+            id, version, area = props["muxp/update/"+str(i)].split('/')
+            return version
+        i += 1
+    return None
+
+def areaIntersectionInProps(area, props):
+    """
+    Checks wheter an area (given as 4-tuple) is intersection with
+    areas defined for updates already done as stated the properties
+    (given as dict) of an dsf file. If there is an intersection, the
+    update_id is returned, None if there is no intersection.
+    """
+    i = 1
+    while ("muxp/update/"+str(i) in props.keys()):
+        id, version, update_area = props["muxp/update/"+str(i)].split('/')
+        a = update_area.split()
+        for j in range(len(a)):
+            a[j] = float(a[j])
+        if doBoundingRectanglesIntersect(area, a):
+            return id
+        i += 1
+    return None
+
