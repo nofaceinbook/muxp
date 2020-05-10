@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.7 exp
+# muxp_math.py   Version: 0.1.8 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -27,6 +27,7 @@
 #Change since 0.1.5: Adapting earclipping (select shortest ears with not maximal angele of trias)
 #Change since 0.1.6: Adapted earclipping agin: Miniear only takes ears with not mximial angle if such trias exist
 #                    Added function doBoundingRectanglesIntersect
+#Change since 0.1.7: check devision by zero in  max_tria_angle for malformed trias
 
 from math import sin, cos, atan2, acos, sqrt, radians, pi #for different calculations
 
@@ -335,6 +336,11 @@ def max_tria_angle(t):
     def length(v):
       return sqrt(dotproduct(v, v))
     def angle(v1, v2):
+        l1 = length(v1)
+        l2 = length(v2)
+        if l1 == 0 or l2 == 0: #### NEW 02.05.2020 to check whether l1 or l2 are zero
+             print("ERROR IN MAX TRIA ANGLE: Tria with identical or 0-length edges. Set max angle to 180 for such a tria!")
+             return 180
         a = dotproduct(v1, v2) / (length(v1) * length(v2))
         ### TBD: SOLVE ISSUES BY ROUNDING; NO NEED TO HAVE ANGEL VERY EXACT
         if a > 1:
