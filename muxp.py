@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.1.7 exp"
+muxp_VERSION = "0.1.8 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -27,6 +27,7 @@ muxp_VERSION = "0.1.7 exp"
 #                     Correct handling when concave cutting polygon in PolyCutPoly (border_v are then anti_clockwise)
 # Change since 0.1.5: Renamed kml export files to have end 0 befor first command and number of command
 # Change since 0.1.6: Added support of non default dsf mesh files + writing dsf original and backups and handling of conflcits with existing updates in dsf
+# Change since 0.1.7: just updated the muxp.math file
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -405,7 +406,8 @@ class muxpGUI:
                 scenerybutton[i].config(bg='green')
 
         buttoninfo = Label(conflictwin, text="Select which dsf file you want to update or press Cancel.\n"
-                                             "Note: Original dsf will never be overwritten, but current is OVERWRITTEN with new version.")
+                                             "Note: Original dsf will never be overwritten, but current is OVERWRITTEN with new version.\n"
+                                             "      When selecting original dsf all previous mesh updates will be lost and would need to be applied again!")
         buttoninfo.grid(row=8, column=0, columnspan=3)
         cancelbutton = Button(conflictwin, text='  CANCEL  ', command = lambda: done("CANCEL")) 
         cancelbutton.grid(row=9, column=1)
