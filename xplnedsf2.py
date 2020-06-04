@@ -418,7 +418,7 @@ class XPLNEDSF:
                 Scalings[-1].append([m, o])
 
     def _packAllScalings_(self): #packs the all Scalings incl. Scal32 values to binary atom strings to be later written to file 
-        self._log_.info("Start to pack and all saclings for pools.")
+        self._log_.info("Start to pack all scalings for pools.")
         self._Atoms_['LACS'] = []
         self._Atoms_['23CS'] = []
         for s in self.Scalings:

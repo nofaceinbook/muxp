@@ -48,7 +48,7 @@ def displayHelp(win):
     Label(helpwin, anchor=W, justify=LEFT, text=
           "This program updates the mesh of X-Plane based on a configuration\n"
           "given in a text file (*.muxp). \n"
-          "Via the config butten you set your X-Plane base folder and the folder\n"
+          "Via the config button you set your X-Plane base folder and the folder\n"
           "where the updated default dsf files are stored.\n"
           "When updating meshes keep in mind that they are only visible when\n"
           "the according scenery pack in the scenery_packs.ini has higher\n"
@@ -57,7 +57,7 @@ def displayHelp(win):
           "available at GitHub: https://github.com/nofaceinbook/muxp/\n\n"
           "Hope the tool helps you.    (c) 2020 by schmax (Max Schmidt)\n\n"
           "IMPORTANT: This tool is in an early development stage.\n"
-          "                         Everything you are doing, you do on your own risk!"
+          "                         Everything you are doing, you do it at your own risk!"
           ).grid(row=0, pady=10, padx=10)
 
 def displayNote(win, note):
@@ -149,7 +149,7 @@ class muxpGUI:
                                      "This folder needs to be inside your 'Custom Scenery' folder of X-Plane.\nYou can also choose to generate a new folder\n"
                                      "like 'zzzz_muxp_default_mesh_updates'.\n" +
                                      "Very low priority in 'scenery_packs.ini' is sufficient, as it is only \nused for replacing default scenery.\n\n" +
-                                     "IMPORTANT: This tool is in an early development stage.\n                       All you are doing, you do on your own risk!")
+                                     "IMPORTANT: This tool is in an early development stage.\n                       All you are doing, you do it at your own risk!")
             self.ConfigMenu()
         else:
             if muxpfile != None: #if muxpfile was given
@@ -206,9 +206,9 @@ class muxpGUI:
         
     def showProgress(self, percentage):
         if self.current_action == 'read':
-            self.muxp_status_label.config(text = "read dsf-file ({} percent)".format(percentage))
+            self.muxp_status_label.config(text="read dsf-file ({} percent)".format(percentage))
         elif self.current_action == 'write':
-            self.muxp_status_label.config(text = "write updated dsf-file ({} percent)".format(percentage))
+            self.muxp_status_label.config(text="write updated dsf-file ({} percent)".format(percentage))
         self.window.update()
 
         
@@ -229,11 +229,11 @@ class muxpGUI:
         log.info("CREATE MUXP-FOLDER: {}".format(xpfolder + "/" + muxp_scenery))
         if not path.exists(xpfolder + "/Custom Scenery"):
             log.error("X-Plane folder not existing or not correct: {}".format(xpfolder))
-            info_label.config(text = "Set correct XP-Folder first")
+            info_label.config(text="Set correct XP-Folder first")
             return -1
         if path.exists(xpfolder + "/" + muxp_scenery): #muxp folder already exists
             log.error("This muxp folder for mesh updates exists already!")
-            info_label.config(text = "folder already exists")
+            info_label.config(text="folder already exists")
             muxpfolder_entry.delete(0, END)
             muxpfolder_entry.insert(0, xpfolder + "/" + muxp_scenery)
             return -1
@@ -241,7 +241,7 @@ class muxpGUI:
             mkdir(xpfolder + "/" + muxp_scenery)
         if not path.exists(inifile):
             log.error("scenery_packs.ini missing in: {}".format(xpfolder + "/Custom Scenery"))
-            info_label.config(text = "scenery_packs.ini missing in Custom Scenery")
+            info_label.config(text="scenery_packs.ini missing in Custom Scenery")
             return -2        
         if not path.exists(inicopy): #Copy current scenery ini if not backed up already
             copy2(inifile ,inicopy)
@@ -266,7 +266,7 @@ class muxpGUI:
         with open(inifile, "w", encoding="utf8", errors="ignore") as f:
             for line in new_infile:
                 f.write(line)
-        info_label.config(text = "folder created & scenery_packs.ini updated")
+        info_label.config(text="folder created & scenery_packs.ini updated")
         muxpfolder_entry.delete(0, END)
         muxpfolder_entry.insert(0, xpfolder + "/" + muxp_scenery)
         return 0 #no error
@@ -328,7 +328,7 @@ class muxpGUI:
         def done(scenlist, infolabel):
             ids = scenlist.curselection()
             if len(ids) == 0:
-                infolabel.config(text = "One scenery need to be selected!") 
+                infolabel.config(text="One scenery need to be selected!")
             else:
                 selected_secenery = scenlist.get(ids)
                 selected_secenery = selected_secenery[selected_secenery.find(":")+2:]
@@ -341,7 +341,7 @@ class muxpGUI:
         listbox.grid(row=1, column=0, columnspan=3)
         for item in scenery_packs.keys():
             listbox.insert(END, scenery_packs[item] + ": " + item )
-        buttoninfo = Label(selectDSFwin, text="Important: When not selecting new or active dsf make sure that you re-arange\n"
+        buttoninfo = Label(selectDSFwin, text="Important: When not selecting new or active dsf make sure that you re-arrange\n"
                                               "           scenery_packs.ini in order that update becomes visible in X-Plane!\n"
                                               "Press OK after selection.")
         buttoninfo.grid(row=2, column=0)
@@ -384,7 +384,7 @@ class muxpGUI:
         conflictwin = Toplevel(self.window)
         conflictwin.attributes("-topmost", True)
         topinfo = Label(conflictwin, anchor='w', justify=LEFT, text="The DSF file you want to update was already updated in a way that may conflict witht current update.\n"
-                                                  "You should think of applying the upadte to un-muxed dsf file. How do you want to proceed?\n Update details  " +
+                                                  "You should think of applying the update to un-muxed dsf file. How do you want to proceed?\n Update details  " +
                                                   "id: " + update["id"] + "  version: " + update["version"] + "  area: {} ".format(update["area"]))
         topinfo.grid(row=0, column=0, columnspan=3)
         scenerylabel = [None, None, None]
@@ -442,7 +442,7 @@ class muxpGUI:
         log.info("muxpfile id: {} version: {} for area:{} with {} commands read.".format(update["id"], update["version"], update["area"], len(update["commands"])))
         
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
-        self.muxp_status_label.config(text = "Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
+        self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
         self.muxp_start.config(state="disabled")
         self.window.update()
         scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder)
@@ -514,7 +514,7 @@ class muxpGUI:
                 mkdir(writefolder)
                 log.info("Created new 10grid folder in muxpfolder: {}".format(writefolder))
             #dsf_output_filename = writefolder + "/" + update["tile"] +".dsf" ## already set above
-        log.info("Wrting updated dsf file to: {}".format(dsf_output_filename))
+        log.info("Writing updated dsf file to: {}".format(dsf_output_filename))
         self.dsf.write(dsf_output_filename)   ### TBD: Error checking if writing fails ################
         return 0 #processed muxp without error    
         
@@ -545,7 +545,7 @@ class muxpGUI:
             ### show currently processed command (incl. name if given) in GUI
             if "name" in c:
                 command_name = c["name"]
-            self.muxp_status_label.config(text = "Processing {}  {}".format(c["command"], command_name))
+            self.muxp_status_label.config(text="Processing {}  {}".format(c["command"], command_name))
             self.window.update()
             log.info("--------------------------------------------------------------------")
             log.info("PROCESSING COMMAND: {}".format(c))
@@ -553,7 +553,7 @@ class muxpGUI:
             if c["command"] == "update_network_levels":
                 ###### tbd: put details below to separate file like mux.area.py #################
                 ###### tbd: support creation of road segments incl. insertion of addtional vertices #################
-                log.info("Updateing network elevation in polygon: {}".format( c["coordinates"]))
+                log.info("Updating network elevation in polygon: {}".format( c["coordinates"]))
                 for chain in self.dsf.getChains():
                     points_in_chain = []
                     for v in chain:
@@ -602,7 +602,7 @@ class muxpGUI:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
                     
             if c["command"] == "cut_spline_segment":
-                log.info("Cuting segement as spline for following eleveation profile: {} m".format(c["3d_coordinates"]))
+                log.info("Cutting segment as spline for the following elevation profile: {} m".format(c["3d_coordinates"]))
                 segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"]) #box around first and last vertex with width
                 segment_interval_bound = [] #bound including also vertices for interval steps
                 for corner1, corner2 in [[1,2], [3,0]]:
