@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#******************************************************************************
+# ******************************************************************************
 #
 # muxp.py
 #        
@@ -20,13 +20,13 @@ muxp_VERSION = "0.2.0 exp"
 # A copy of the GNU General Public License is available at:
 #   <http://www.gnu.org/licenses/>. 
 #
-#******************************************************************************
+# ******************************************************************************
 
-#New in 0.2.0: update_elevation_in_poly command
-#New in 0.2.0: updated that in activatePack the scenery where packs is inserted in ini file is not lost
-#New in 0.2.0: Allow additional configurations to be set and saved in .config
-#New in 0.2.0: In activateSceneryPack creat also scenery_packs.beforeMUXP if not yet exists
-#New in 0.2.0: If default scenery is set as source in .config than first checks muxpfolder if this tile exists to be updated
+# New in 0.2.0: update_elevation_in_poly command
+# New in 0.2.0: updated that in activatePack the scenery where packs is inserted in ini file is not lost
+# New in 0.2.0: Allow additional configurations to be set and saved in .config
+# New in 0.2.0: In activateSceneryPack creat also scenery_packs.beforeMUXP if not yet exists
+# New in 0.2.0: If default scenery is set as source in .config than first checks muxpfolder if this tile exists to be updated
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -554,17 +554,26 @@ class muxpGUI:
         log.info("muxpfile id: {} version: {} for area:{} with {} commands read.".format(update["id"], update["version"], update["area"], len(update["commands"])))
         
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
-        scenery_packs = None #dictionary of scenery packs for according tiles
-        if len(self.dsf_sceneryPack) == 0: #no scenery pack yet defined (e.g. via config file)
-            self.muxp_status_label.config(text = "Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
+        scenery_packs = None # dictionary of scenery packs for according tiles
+        if len(self.dsf_sceneryPack) == 0:  # no scenery pack yet defined (e.g. via config file)
+            self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
             self.muxp_start.config(state="disabled")
             self.window.update()
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder)
-            self.SelectDSF(scenery_packs) #will set selected pack to self.dsf_sceneryPack
-        else: #scenery_pack defined (e.g. via config file)
+            self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
+        elif self.dsf_sceneryPack == "[ACTIVE]":
+            scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder)
+            for sp in scenery_packs.keys():
+                if scenery_packs[sp] == "ACTIVE":
+                    self.dsf_sceneryPack = sp
+                    break
+            if self.dsf_sceneryPack == "[ACTIVE]":  # if no ACTIVE pack found above
+                self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery"  # then use Default Scenery as ACTIVE
+            log.info("Config requested to use active scenery pack as source, which is: {}".format( self.dsf_sceneryPack))
+        else:  # scenery_pack defined (e.g. via config file)
             if self.dsf_sceneryPack.find("X-Plane 11 Global Scenery") >= 0: #in case default XP scenery selected
                 if path.exists(self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"): #and tile is already in muxpfolder
-                    self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):] #chose muxpfolder as scenery_pack to update
+                    self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):]  # choose muxpfolder as scenery_pack to update
                     log.info("As muxp-folder {} includes tile {} this will be updated instead of plain default tile.".format(self.dsf_sceneryPack, update["tile"]))
         dsf_output_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf" #this is default dsf filename name for scenery pack
             ### WARNING: In case of default mesh, the dsf_output_filname needs to be changed to the one in muxpfolder (done below)

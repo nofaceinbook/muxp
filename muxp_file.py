@@ -317,6 +317,7 @@ def findDSFmeshFiles(tile, xpfolder):
             dsf_file = xpfolder + "/Custom Scenery/" + scenery + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"
             if path.exists(dsf_file):
                 props = getDSFproperties(dsf_file)
+                print("Properties for {} are: {}".format(dsf_file, props))  # JUST TESTING, TO BE REMOVED !!!! ###########
                 if not 'sim/overlay' in props.keys():
                 #if not isDSFoverlay(dsf_file): ### OLDER FUNCTION, TO BE REMOVED
                     packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
