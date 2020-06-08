@@ -540,6 +540,12 @@ class muxpGUI:
         """
         Initiates updating the mesh based on the muxp file (filename).
         """
+        ########## IN CASE OF .kml FILE CONVERT TO MUXP FIRST #########
+        if filename.rfind(".kml") == len(filename) - 4:  # filename ends with '.kml'
+            log.info("Converting kml file: {} to muxp-file.".format(filename))
+            filename = kml2muxp(filename)  # converts kml file to a new muxp file (ending .muxp)
+            log.info("Finished conversion. Processing now: {}".format(filename))
+
         ############# READ AND EVALUATE MUXP FILE #####################
         update, error = readMuxpFile(filename, LogName)
         if update == None:
