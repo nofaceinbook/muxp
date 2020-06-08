@@ -1,6 +1,6 @@
 #******************************************************************************
 #
-# xplnedsf2.py        Version 0.5.6  for muxp
+# xplnedsf2.py        Version 0.5.7  for muxp
 # ---------------------------------------------------------
 # Python module for reading and writing X_Plane DSF files.
 #
@@ -28,6 +28,7 @@
 ###            correct max_int for modulo unwrapping, and encoding 32bit pools
 ### NEW 0.5.6: Added separate function isDSFoverlay(file) to test whether a dsf file is an overlay
 ###            Checking out of bound when packing raster values (might be removed again!)
+### NEW 0.5.7: Returning error coder for getDSFproperties()
 
 from os import path, stat #required to retrieve length of dsf-file
 from struct import pack, unpack #required for binary pack and unpack
@@ -1094,12 +1095,12 @@ def isDSFoverlay(file):
                     
 def getDSFproperties(file):
     """
-    This function returns the properties of a dsf file as dict.
+    This function returns error code and the properties of a dsf file as dict or error-string in case error != 0.
     """
     if not path.isfile(file):
-        return "ERROR in getDSFproperties: File {} does not exist!".format(file)
-    flength = stat(file).st_size #length of dsf-file   
-    with open(file, "rb") as f:    ##Open Tile as binary fily for reading
+        return -1, "ERROR in getDSFproperties: File {} does not exist!".format(file)
+    flength = stat(file).st_size  # length of dsf-file
+    with open(file, "rb") as f:  # Open Tile as binary file for reading
         start = f.read(12)
         if start.startswith(b'7z\xBC\xAF\x27\x1C'):
             if PY7ZLIBINSTALLED:
@@ -1108,34 +1109,34 @@ def getDSFproperties(file):
                 filedata = archive.getmember(archive.getnames()[0]).read()
                 f.close()
                 f = BytesIO(filedata)
-                flength = len(filedata) #also update to decompressed length
+                flength = len(filedata)  # also update to decompressed length
                 start = f.read(12)
             else:
-                return "ERROR in getDSFproperties: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
+                return -2, "ERROR in getDSFproperties: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
         identifier, version = unpack('<8sI',start)
         if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
-            return "ERROR in getDSFproperties: File {} is no X-Plane dsf-file Version 1!".format(file)
-        inHeader = False # Flag when inside Header atom of atoms
-        props_dict = dict() #dictionary with properties to be returned
-        while f.tell() < flength - 16: #read chunks until reaching last 16 bytes hash value
+            return -3, "ERROR in getDSFproperties: File {} is no X-Plane dsf-file Version 1!".format(file)
+        inHeader = False  # Flag when inside Header atom of atoms
+        props_dict = dict()  # dictionary with properties to be returned
+        while f.tell() < flength - 16:  # read chunks until reaching last 16 bytes hash value
             bytes = f.read(8)
-            atomID, atomLength = unpack('<4sI',bytes)
+            atomID, atomLength = unpack('<4sI', bytes)
             atomID = atomID.decode("utf-8")
             if atomID == "DAEH":
                 inHeader = True
             elif inHeader and atomID == "PORP":
                 bytes = f.read(atomLength-8)
                 x=bytes.split(b'\x00')
-                for i in range(0,len(x)-1,2):
+                for i in range(0, len(x)-1, 2):
                     props_dict[x[i].decode("utf-8")]=x[i+1].decode("utf-8")
-                return props_dict
-                start = 0 #position when going through bytes
+                return 0, props_dict  # 0 for no error
+                start = 0  # position when going through bytes
                 while bytes.find(b'\x00',start) >= 0:
                     next = bytes.find(b'\x00',start)
                     end = bytes.find(b'\x00',next+1)
-                    props_dict[bytes[start:next].decode("utf-8")] = bytes[next+1:end].decode("utf-8")       ###### l.append(atom[i:j].decode("utf-8"))
+                    props_dict[bytes[start:next].decode("utf-8")] = bytes[next+1:end].decode("utf-8")
                     start = end+1
-                return props_dict    
+                return 0, props_dict  # 0 for no error
             else:
-                bytes = f.read(atomLength-8)   ##Continue reading, Length includes 8 bytes header
-    return "ERROR in getDSFproperties: File {} does not have an HEADER/PROPERTIES atom; no vaild dsf file!".format(file)
+                bytes = f.read(atomLength-8)  # Continue reading, Length includes 8 bytes header
+    return -4, "ERROR in getDSFproperties: File {} does not have an HEADER/PROPERTIES atom; no vaild dsf file!".format(file)

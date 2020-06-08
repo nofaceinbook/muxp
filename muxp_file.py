@@ -294,7 +294,7 @@ def get10grid(tile):
     return grid10
         
 
-def findDSFmeshFiles(tile, xpfolder):
+def findDSFmeshFiles(tile, xpfolder, logname):
     """
     This function returns dictionary of all Scenery Packs that include a mesh
     for given tile or in general if tile == None.
@@ -303,6 +303,7 @@ def findDSFmeshFiles(tile, xpfolder):
     then value is type of ACTIVE (topmost in scenery_packs.ini), PACK, DEFAULT,
     DISABLED, NEW (not in scenery_paxcks.ini yet).
     """
+    log = getLogger(logname + "." + __name__)  # logging based on pre-defined logname
     inifile = xpfolder + "/Custom Scenery/scenery_packs.ini"
     packs = dict() #dictionary of scenery packs with key of pack as name and type as value
 
@@ -316,13 +317,15 @@ def findDSFmeshFiles(tile, xpfolder):
         for scenery in dirs:
             dsf_file = xpfolder + "/Custom Scenery/" + scenery + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"
             if path.exists(dsf_file):
-                props = getDSFproperties(dsf_file)
-                print("Properties for {} are: {}".format(dsf_file, props))  # JUST TESTING, TO BE REMOVED !!!! ###########
-                if not 'sim/overlay' in props.keys():
-                #if not isDSFoverlay(dsf_file): ### OLDER FUNCTION, TO BE REMOVED
-                    packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
-                elif props["sim/overlay"] == '0': #In case such a definition would exist.....
-                    packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
+                err, props = getDSFproperties(dsf_file)
+                if err:
+                    log.error(props)
+                else:
+                    if not 'sim/overlay' in props.keys():
+                    #if not isDSFoverlay(dsf_file): ### OLDER FUNCTION, TO BE REMOVED
+                        packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
+                    elif props["sim/overlay"] == '0': #In case such a definition would exist.....
+                        packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
     else: #search for any mesh packs
         packs["Global Scenery/X-Plane 11 Global Scenery"] = "DEFAULT"  #For all Tiles DEFAULT is allways an option
         for scenery in next(walk(xpfolder+"/Custom Scenery/"))[1]: #get all scenery pack folders in Custom Secenery
@@ -332,11 +335,14 @@ def findDSFmeshFiles(tile, xpfolder):
                     if f[len(f)-4:] != ".dsf": #only consider .dsf-files
                         continue
                     if stat(path.join(root, f)).st_size > 1000000: ### WARNING: DSF Mesh with size less than 1MB will not be considered to be a mesh pack!
-                        props = getDSFproperties(path.join(root,f))
-                        if not 'sim/overlay' in props.keys():
-                            packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
-                        elif props["sim/overlay"] == '0': #In case such a definition would exist.....
-                            packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
+                        err, props = getDSFproperties(path.join(root, f))
+                        if err:
+                            log.error(props)
+                        else:
+                            if not 'sim/overlay' in props.keys():
+                                packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
+                            elif props["sim/overlay"] == '0': #In case such a definition would exist.....
+                                packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
                     next_pack = True #after analysis of first .dsf file decide if mesh or not --> WARNING: Might skip small dsf or mixed dsf mesh folders
                     break
                 if next_pack:
