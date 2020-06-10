@@ -185,7 +185,7 @@ class muxpGUI:
             log.error("Config file has no value for xpfolder or muxpfolder.")
             return -3 #error value
         self.xpfolder = c["xpfolder"].strip()
-        if self.xpfolder.find("[INSIDE]") == 0: #Allow to get X-Plane folder based on current folder where run/config file is in
+        if self.xpfolder.find("[INSIDE]") == 0:  # Allow to get X-Plane folder based on current folder where run/config file is in
             head, tail = path.split(path.abspath(path.dirname(runfile)))
             while len(tail) > 0:
                 if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
