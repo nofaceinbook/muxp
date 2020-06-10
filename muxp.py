@@ -188,9 +188,10 @@ class muxpGUI:
         if self.xpfolder.find("[INSIDE]") == 0: #Allow to get X-Plane folder based on current folder where run/config file is in
             head, tail = path.split(path.abspath(path.dirname(runfile)))
             while len(tail) > 0:
-                if tail == "X-Plane 11":
-                     self.xpfolder = path.join(head, tail)
-                     break
+                if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
+                    self.xpfolder = head
+                    log.info("Set X-Plane folder to: {}".format(self.xpfolder))
+                    break
                 head, tail = path.split(head)
             if len(tail) == 0:
                 log.error("Not inside X-Plane folder as stated in config file. X-Plane Folder not set! Current folder is: {}".format(path.abspath(path.dirname(runfile))))
@@ -199,6 +200,7 @@ class muxpGUI:
         self.muxpfolder = c["muxpfolder"].strip()
         if self.muxpfolder.find("[THIS_FOLDER]") == 0: 
             self.muxpfolder = path.abspath(path.dirname(runfile))
+            log.info("Set MUXP folder to: {}".format(self.muxpfolder))
         if "kmlExport" in c:
             try:
                 self.kmlExport = int(c['kmlExport'])

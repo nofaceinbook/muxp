@@ -1,3 +1,7 @@
 /muxp.log
 /muxp.config
 /.idea/
+/test.py
+/muxp.spec
+/dist/
+/build/
