@@ -309,10 +309,10 @@ class muxpGUI:
         """
         inifile = self.xpfolder + "/Custom Scenery/scenery_packs.ini"
         inibackup = self.xpfolder + "/Custom Scenery/scenery_packs.backupMUXP"
-        inicopy = xpfolder + "/Custom Scenery/scenery_packs.beforeMUXP"
+        inicopy = self.xpfolder + "/Custom Scenery/scenery_packs.beforeMUXP"
         new_infile = []
         if not path.exists(inifile):
-            log.error("scenery_packs.ini missing in: {}".format(xpfolder + "/Custom Scenery"))
+            log.error("scenery_packs.ini missing in: {}".format(self.xpfolder + "/Custom Scenery"))
             return -1
         if not path.exists(inicopy): #Copy current scenery ini if not backed up already
             copy2(inifile ,inicopy)
