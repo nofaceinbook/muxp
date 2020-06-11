@@ -98,7 +98,8 @@ def validate_muxp(d, logname):
                                "limit_edges" : ["coordinates", "edge_limit"],
                                "update_raster_elevation" : ["coordinates", "elevation"],
                                "update_raster4spline_segment" : ["3d_coordinates", "width"],
-                               "update_elevation_in_poly": ["coordinates", "elevation"] }
+                               "update_elevation_in_poly": ["coordinates", "elevation"],
+                               "extract_mesh_to_file": ["coordinates"]}
     
     PARAMETER_TYPES = {"command" : ["string"],   #this is just command-type
                        "_command_info" : ["string"],  #added below, includes full command including added info after '.' like cut_polygon.inner

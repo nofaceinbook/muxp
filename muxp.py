@@ -319,16 +319,16 @@ class muxpGUI:
             log.error("scenery_packs.ini missing in: {}".format(self.xpfolder + "/Custom Scenery"))
             return -1
         if not path.exists(inicopy): #Copy current scenery ini if not backed up already
-            copy2(inifile ,inicopy)
+            copy2(inifile, inicopy)
             log.info("BASE-Backup of current scenery_packs.ini saved to: {}".format(inicopy))
-        copy2(inifile ,inibackup) #In each activation make a backup
+        copy2(inifile, inibackup) #In each activation make a backup
         log.info("Backup of current scenery_packs.ini saved to: {}".format(inibackup))
         with open(inifile, encoding="utf8", errors="ignore") as f:
             pack_activated = False
             for line in f:
                 if line.startswith("SCENERY_PACK"):
                     scenery = line[line.find(" ")+1:]
-                    if scenery == pack+'/\n': # '/\n' always in .ini at end of folder
+                    if scenery == pack+'/\n':  # '/\n' always in .ini at end of folder
                         if not pack_activated:
                             new_infile.append("SCENERY_PACK {}/\n".format(pack)) # '/' required in ini to be a correct path
                             log.info("Scenery pack '{}' for updated dsf-file was already in scenery_packs.ini. Set to an active pack.".format(scenery))
@@ -683,7 +683,7 @@ class muxpGUI:
                 for scen in scenery_packs:
                     if scenery_packs[scen] in ["ACTIVE", "PACK"]:
                         before_packs.append(scen)
-                log.info("Updateing scnery_packs.ini and inserting new pack before {} in order that this scenery will be activated in X-Plane".format(before_packs))
+                log.info("Updateing scnery_packs.ini and inserting new pack {} before {} in order that this scenery will be activated in X-Plane".format(newSceneryPack, before_packs))
                 self.activateSceneryPack(newSceneryPack, before_packs)
         
         return 0 #processed muxp without error    
@@ -729,7 +729,13 @@ class muxpGUI:
                             log.info("For coords: {} set elevation to: {}".format(t[i][0:2], t[i][2]))
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index+1))
-                                
+
+            if c["command"] == "extract_mesh_to_file":
+                obj_filename = self.runfile + ".obj"
+                log.info("Extract mesh in polygon: {} to file {}".format(c["coordinates"], obj_filename))
+                a.extractMeshToObjFile(c["coordinates"], obj_filename)
+                if self.kmlExport:
+                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
             
             if c["command"] == "update_network_levels":
                 ###### tbd: put details below to separate file like mux.area.py #################

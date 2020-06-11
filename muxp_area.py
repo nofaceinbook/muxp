@@ -512,7 +512,25 @@ class muxpArea:
             self.limitEdges(poly, limit) #shorten again
         ########## This funciton might be improved to go only through edges in new_trias instead starting from scratch in recursions
 
-        
+    def extractMeshToObjFile(self, poly, filename, scal=100000):
+        """
+        Extracts all pyhsical trias of area which are in poly to an Wavefront .obj File with filename.
+        Existing files will be overwritten!
+        """
+        extract_atrias = []  # list of area trias, that have to be extracted
+        for t in self.atrias:  # go through all trias in area
+            if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
+                if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
+                    extract_atrias.append(t)
+        center = CenterInAtrias(extract_atrias)
+        with open(filename, "w", encoding="utf8", errors="ignore") as f:
+            f.write("# muxp mesh extract with center: {}\n".format(center))
+            f.write("# muxp lan-lon-scale: {}\n".format(scal))
+            for t in extract_atrias:
+                for i in range(3):
+                    f.write("v {} {} {}\n".format((t[i][0]-center[0])*scal, (t[i][1]-center[1])*scal, (t[i][2]-center[2])))
+            for i in range(len(extract_atrias)):
+                f.write("f {} {} {}\n".format(i*3+1, i*3+2, i*3+3))
     
     def createDSFVertices(self, elevscal=1):
         """

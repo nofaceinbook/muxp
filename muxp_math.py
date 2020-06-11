@@ -153,6 +153,21 @@ def doBoundingRectanglesIntersect(r, s):
     else:
         return False
 
+def CenterInAtrias(atrias):
+    """
+    Returns center as [x, y, z] for all trias in a list of area trias.
+    """
+    max_coords = [-99999, -99999, -99999]
+    min_coords = [99999, 99999, 99999]
+    for t in atrias:
+        for i in range(3):
+            for j in range(3):
+                if t[i][j] < min_coords[j]:
+                    min_coords[j] = t[i][j]
+                if t[i][j] > max_coords[j]:
+                    max_coords[j] = t[i][j]
+    return [(min_coords[0]+max_coords[0])/2, (min_coords[1]+max_coords[1])/2, (min_coords[2]+max_coords[2])/2]
+
 def segmentToBox (p1, p2, w):
     """
     Returns for a segement between points p1 and p2 (with [x,y] coordinates)
