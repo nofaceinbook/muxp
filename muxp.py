@@ -120,7 +120,7 @@ class muxpGUI:
         self.help_button = Button(self.window, text=' Help ', fg='red', command=lambda: displayHelp(self.window))
         self.help_button.grid(row=0, column=3, sticky=W, pady=4, padx=10)
 
-        self.muxpfile_label = Label(self.window, text="muxp File (*.muxp):")
+        self.muxpfile_label = Label(self.window, text="MUXP File:")
         self.muxpfile_label.grid(row=1, column=0, sticky=W)
         self.muxpfile_entry = Entry(self.window, width=60)
         self.muxpfile_entry.grid(row=1, column=1, columnspan=2, sticky=W)
@@ -245,7 +245,8 @@ class muxpGUI:
     def select_muxpfile(self, entry, filename=None):
         # if file is set it is directly displayed
         if filename is None:
-            filename = askopenfilename()
+            filename = askopenfilename(filetypes=[("MUXP files", ".muxp"), ("kml files", "muxp.kml"),
+                                                  ("YAML files", "muxp.yaml"), ("all files", "*")])
             if not filename:
                 return
 
