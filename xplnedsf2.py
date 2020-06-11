@@ -964,7 +964,7 @@ class XPLNEDSF:
         flength = stat(file).st_size #length of dsf-file   
         self._progress_ = [0, 0, flength] #initilize progress start for reading
         with open(file, "rb") as f:    ##Open Tile as binary fily for reading
-            self._log_.info("Opend file {} with {} bytes.".format(file, flength))
+            self._log_.info("Opened file {} with {} bytes.".format(file, flength))
             start = f.read(12)
             if start.startswith(b'7z\xBC\xAF\x27\x1C'):
                 if PY7ZLIBINSTALLED:
@@ -1048,7 +1048,7 @@ class XPLNEDSF:
                         self._updateProgress_(len(s))
             if self._DEBUG_: self._log_.debug("New md5 value appended to file is: {}".format(m.digest()))
             f.write(m.digest())
-        self._log_.info("Finshed writing dsf-file.")
+        self._log_.info("Finished writing dsf-file.")
         return 0
 
 

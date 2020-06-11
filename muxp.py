@@ -219,7 +219,7 @@ class muxpGUI:
         if "dsfSourcePack" in c: #This path is relative from xpfolder
             self.dsf_sceneryPack = c["dsfSourcePack"].strip()
             if self.dsf_sceneryPack != "[ACTIVE]" and not path.exists(self.xpfolder + "/" + c["dsfSourcePack"]):
-                log.error("DSF Source Package {} given in config file doe not exist. It is ignored!".format(self.dsf_sceneryPack))
+                log.error("DSF Source Package {} given in config file does not exist. It is ignored!".format(self.dsf_sceneryPack))
                 self.dsf_sceneryPack = ""
             else:
                 log.info("Scenery Source Package set to: {}".format(self.dsf_sceneryPack))
@@ -242,10 +242,13 @@ class muxpGUI:
             self.muxp_status_label.config(text="write updated dsf-file ({} percent)".format(percentage))
         self.window.update()
 
-        
-    def select_muxpfile(self, entry, filename=None): #if file is set it is directly displayed
-        if filename == None:
+    def select_muxpfile(self, entry, filename=None):
+        # if file is set it is directly displayed
+        if filename is None:
             filename = askopenfilename()
+            if not filename:
+                return
+
         entry.delete(0, END)
         entry.insert(0, filename)
         self.muxp_start.config(state="normal")
