@@ -82,8 +82,8 @@ def readMuxpFile(filename, logname):
 
 def validate_muxp(d, logname):
     """
-    Validates values in read muxp dictionary d and turns them inside d to correc format
-    or returs error in case walues don't match (first value is integer [negative error, positive warning], second error message)
+    Validates values in read muxp dictionary d and turns them inside d to correct format
+    or returs error in case values don't match (first value is integer [negative error, positive warning], second error message)
     """
     SUPPORTED_MUXP_FILE_VERSION = 0.1
 
@@ -385,43 +385,43 @@ def getMUXPdefs(props):
     muxes = []
     i = 1
     while ("muxp/update/"+str(i) in props.keys()):
-        id, version, area = props["muxp/update/"+str(i)].split('/')
+        update_id, version, area = props["muxp/update/"+str(i)].split('/')
         a = area.split()
         for j in range(len(a)):
             a[j] = float(a[j])
-        muxes.append([id, version, a])
+        muxes.append([update_id, version, a])
         i += 1
     return muxes
 
 def updateAlreadyInProps(update_id, props):
     """
-    Checks wheter an muxp update (given as id string) is in the properties
+    Checks whether an muxp update (given as update_id string) is in the properties
     (given as dict) of an dsf file. If it is in the update the version
     of the update in the props is returned, if not None.
     """
     i = 1
-    while ("muxp/update/"+str(i) in props.keys()):
+    while "muxp/update/"+str(i) in props.keys():
         if props["muxp/update/"+str(i)].find(update_id) == 0:
-            id, version, area = props["muxp/update/"+str(i)].split('/')
+            update_id, version, area = props["muxp/update/"+str(i)].split('/')
             return version
         i += 1
     return None
 
 def areaIntersectionInProps(area, props):
     """
-    Checks wheter an area (given as 4-tuple) is intersection with
+    Checks whether an area (given as 4-tuple) is intersection with
     areas defined for updates already done as stated the properties
     (given as dict) of an dsf file. If there is an intersection, the
     update_id is returned, None if there is no intersection.
     """
     i = 1
-    while ("muxp/update/"+str(i) in props.keys()):
-        id, version, update_area = props["muxp/update/"+str(i)].split('/')
+    while "muxp/update/"+str(i) in props.keys():
+        update_id, version, update_area = props["muxp/update/"+str(i)].split('/')
         a = update_area.split()
         for j in range(len(a)):
             a[j] = float(a[j])
         if doBoundingRectanglesIntersect(area, a):
-            return id
+            return update_id
         i += 1
     return None
 
