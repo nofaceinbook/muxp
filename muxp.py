@@ -34,7 +34,7 @@ from muxp_area import *
 from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
-from os import path, replace, mkdir
+from os import path, replace, mkdir, sep
 from shutil import copy2
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
@@ -189,7 +189,7 @@ class muxpGUI:
             head, tail = path.split(path.abspath(path.dirname(runfile)))
             while len(tail) > 0:
                 if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
-                    self.xpfolder = head
+                    self.xpfolder = head.replace(sep, '/')  # setting for all OS the correct separators in filename
                     log.info("Set X-Plane folder to: {}".format(self.xpfolder))
                     break
                 head, tail = path.split(head)
@@ -200,6 +200,7 @@ class muxpGUI:
         self.muxpfolder = c["muxpfolder"].strip()
         if self.muxpfolder.find("[THIS_FOLDER]") == 0: 
             self.muxpfolder = path.abspath(path.dirname(runfile))
+            self.muxpfolder = self.muxpfolder.replace(sep, '/')  # setting for all OS the correct separators in filename
             log.info("Set MUXP folder to: {}".format(self.muxpfolder))
         if "kmlExport" in c:
             try:
@@ -896,13 +897,12 @@ class muxpGUI:
         a.insertMeshArea()
 
 
-    
 ########### MAIN #############
-log = defineLog('muxp', 'INFO', 'INFO') #no log on console for EXE version --> set first INFO to None
+log = defineLog('muxp', 'INFO', 'INFO')  # no log on console for EXE version --> set first INFO to None
 log.info("Started muxp Version: {}".format(muxp_VERSION))
-runfile = argv[0]
+runfile = argv[0].replace(sep, '/')  # setting for all OS the correct separators in filename
 if len(argv) > 1:
-    muxpfile = argv[1]
+    muxpfile = argv[1].replace(sep, '/')  # setting for all OS the correct separators in filename
 else:
     muxpfile = None
 main = muxpGUI(runfile, muxpfile)
