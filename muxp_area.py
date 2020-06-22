@@ -518,19 +518,130 @@ class muxpArea:
         Existing files will be overwritten!
         """
         extract_atrias = []  # list of area trias, that have to be extracted
+        vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         for t in self.atrias:  # go through all trias in area
             if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
                 if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
                     extract_atrias.append(t)
+                    for v in range(3):
+                        vc = (round(t[v][0], 7), round(t[v][1], 7))
+                        if vc not in vertices:
+                            vertices[vc] = [t[v][2], len(vertices)]
         center = CenterInAtrias(extract_atrias)
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
-            f.write("# muxp mesh extract with center: {}\n".format(center))
-            f.write("# muxp lan-lon-scale: {}\n".format(scal))
+            f.write("# muxp mesh extract with center: {} {} {}\n".format(center[0], center[1], center[2]))
+            f.write("# muxp lat-lon-scale: {}\n".format(scal))
+            for vc in vertices:
+                f.write("v {} {} {}\n".format((vc[0] - center[0]) * scal, (vc[1] - center[1]) * scal,
+                                              (vertices[vc][0] - center[2])))
             for t in extract_atrias:
-                for i in range(3):
-                    f.write("v {} {} {}\n".format((t[i][0]-center[0])*scal, (t[i][1]-center[1])*scal, (t[i][2]-center[2])))
-            for i in range(len(extract_atrias)):
-                f.write("f {} {} {}\n".format(i*3+1, i*3+2, i*3+3))
+                f.write("f")
+                for v in range(3):
+                    f.write(" {}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 1))
+                    # +1 as in .obj indices start with 1 instead 0
+                f.write("\n")
+
+
+    def insertMeshFromObjFile(self, filename, poly, terrain):
+        """
+        Inserts mesh with only physical trias from an .obj filename and inserts it in area.
+        The outer polygon of file-mesh is connected to the poly using triangulation. All this
+        new trias will be set to type terrain.
+        Mesh must not have different vertex definitions for same x,y coordinates and ther must be no overlapping/
+        double faces.
+        To have room for the mesh, the mesh is first cut by poly and all inner trias are removed.
+        """
+        self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
+        polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # False for not keeping inner trias\
+        # None for elevation as only new terrain should get elevation
+        borderv = sortPointsAlongPoly(borderv, poly)
+        borderv = borderv[borderv.index(min(borderv)):] + borderv[:borderv.index(min(borderv))]
+        #  borderv start now with the most south-west corner
+        for v in borderv:
+            self.log.info("Border Vertex after Cut: {}".format(v))
+        center = [0, 0, 0]  # in case file has no info on center
+        scale = 1  # in case file has no info on scale
+        vertices = [[None]] #list of vertices to be read; first dummy element to match index starting with 1
+        trias = []
+        outer_edges = dict()  # dict with (v1_index, v2_index) as keya; at the end keys are all edges of poly outside
+        with open(filename, encoding="utf8", errors="ignore") as f:
+            for line in f:
+                if line.find("# muxp mesh extract with center:") >= 0:
+                    center_info = line[line.find(":") + 1:]
+                    center = center_info.split()
+                    for i in range(len(center)):
+                        center[i] = float(center[i])  ######### TBD: ERROR CHECKING
+                    self.log.info("Coordinates read will be relative to center: {}".format(center))
+                if line.find("# muxp lat-lon-scale:") >= 0:
+                    scale = float(line[line.find(":") + 1:])
+                    self.log.info("Scale for lat/lon coordinates used is: {}".format(scale))
+                if line.find("v ") == 0:  # vertex definition in .obj file
+                    v = line.split()
+                    v.pop(0)  # remove first element 'v' from list
+                    for i in range(len(v)):
+                        if i < 2:
+                            v[i] = float(v[i]) / scale + center[i]   ######### TBD: ERROR CHECKING
+                        else:
+                            v[i] = float(v[i]) + center[i]   ######### TBD: ERROR CHECKING
+                    vertices.append(v)
+                if line.find("f ") == 0:  # face definition in .obj file
+                    # IMPORTANT: THIS VERSION ASSUMES ONLY V INFO AND NOT VN, VT .... !!!!!!!!!!!!!!!!
+                    f = line.split()
+                    f.pop(0)  # remove first element 'f' from list
+                    t = []  # new tria to be defined
+                    for i in range(len(f)):  ########## WHY len(f)??? Better check that it is 3 (we need trias)??? #######
+                        f[i] = int(f[i])  ######### TBD: ERROR CHECKING
+                    for i in range(len(f)):  ########## WHY len(f)??? see above, should be always 3
+                        t.append(vertices[f[i]])
+                        if f[i] < f[(i+1)%3]:
+                            edge_sorted = (f[i], f[(i+1)%3])
+                        else:
+                            edge_sorted = (f[(i + 1) % 3], f[i])
+                        if edge_sorted in outer_edges:
+                            outer_edges.pop(edge_sorted)  # if the same edge appears twice it is inside
+                        else:
+                            outer_edges[edge_sorted] = True  # edge read the first time
+                    trias.append(t)
+        patchID = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!!        for tria in trias:
+        self.log.info("Following trias have been read from file:")
+        for tria in trias:
+            self.log.info(tria)
+            new_v = [None, None, None]
+            for e in range(3):
+                new_v[e] = [tria[e][0], tria[e][1], tria[e][2], 0, 0] #This version only creates simple vertices without s/t coordinates
+            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
+            #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
+        self.log.info("Following outer edges identified: {}".format(outer_edges))
+        v = next(iter(outer_edges))
+        oe_poly = [v[0]]  # list with indices to vertices that build the poly along outer edges
+        next_v = v[1]  # index to next vertex that needs to be found on outline polygon
+        while len(outer_edges) > 1:  # last edge ist clear, as this is just way back to first vertex
+            outer_edges.pop(v)
+            self.log.info("Outer Poly: {} searching next: {}".format(oe_poly, next_v))
+            next_v_found = False
+            for v in outer_edges:
+                if next_v in v:
+                    oe_poly.append(next_v)
+                    if next_v == v[0]:
+                        next_v = v[1]
+                    else:
+                        next_v = v[0]
+                    next_v_found = True
+                    break
+            if not next_v_found:
+                self.log.error("Mesh to be inserted is not continuous. Seems to have holes. It can not be inserted!")
+                return -1
+        oe_poly.append(next_v)  # last edge back to first vertex inserted
+        self.log.info("Outer Edges as Poly: {}".format(oe_poly))
+        for i in range(len(oe_poly)):
+            oe_poly[i] = vertices[oe_poly[i]]
+        oe_poly = oe_poly[oe_poly.index(min(oe_poly)):] + oe_poly[:oe_poly.index(min(oe_poly))]
+        #  oe_poly start now with the most south-west corner
+        self.log.info("Outer Edges as Poly: {}".format(oe_poly))
+        ### SET now oe_poly and borderv to correct winding
+        ### Triangulate now polys connected at their SW corner
+        ### SET elevation of new triangulated polygons base on elevation of exising vertices at that coordinated
+
     
     def createDSFVertices(self, elevscal=1):
         """

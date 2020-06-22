@@ -60,9 +60,33 @@ def edgeDistance(p, a, b): #calculates distance of point p to edge e from a to b
     vector_ab = (b[0] - a[0], b[1] - a[1])
     ortho_ab = (b[1] - a[1], a[0] - b[0])
     vector_ap = (p[0] - a[0], p[1] - a[1])
-    ab_part, ortho_part = _linsolve_(vector_ab[0], ortho_ab[0], vector_ap[0],vector_ab[1], ortho_ab[1], vector_ap[1])
+    ab_part, ortho_part = _linsolve_(vector_ab[0], ortho_ab[0], vector_ap[0], vector_ab[1], ortho_ab[1], vector_ap[1])
     dist = distance(p, [p[0] + ortho_part * ortho_ab[0], p[1] + ortho_part * ortho_ab[1]] )
-    return ab_part, ortho_part, dist 
+    return ab_part, ortho_part, dist
+
+def sortPointsAlongPoly(points, poly, epsilon=0.001):
+    """
+    Returns given list of points in [x, y] coordinates which are lying on the edges of a polygon
+    (also given as [x, y] coordinates, sorted such that they are following position on the edges.
+    epsilon is the minimal error distances allowed in decision if point is on edge.
+    """
+    sortedPoints = []  # list of points sorted along Poly
+    for p in points:
+        for i in range(len(poly) - 1):
+            edist, odist, dist = edgeDistance(p, poly[i], poly[i+1])
+            print("Check point {} for edge {} results in odist {} and distance {}".format(p, i, odist, edist))
+            if odist < epsilon and edist >= -epsilon and edist <= 1 + epsilon:
+                print("    added to list")
+                sortedPoints.append([i, edist, p[0], p[1]])
+                break
+            if i == len(poly) - 2:  # we did not find an edge for p
+                #print("ERROR: point {} not on edge of poly {}".format(p, poly))
+                return None
+    sortedPoints.sort()  # okay now they are sorted as required
+    for i in range(len(sortedPoints)):
+        print("Point {} on edge no {} starting at {} with part {}".format(sortedPoints[i][2:], sortedPoints[i][0], poly[sortedPoints[i][0]], sortedPoints[i][1]))
+        sortedPoints[i] = [sortedPoints[i][2], sortedPoints[i][3]]  # remove now data used for sorting
+    return sortedPoints
 
 def PointLocationInTria(p, t): #delivers location of point p in Tria t by vectors spanned by t from last vertex in tria
     denom = ((t[1][1] - t[2][1])*(t[0][0] - t[2][0]) + (t[2][0] - t[1][0])*(t[0][1] - t[2][1]))

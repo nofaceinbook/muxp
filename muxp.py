@@ -34,11 +34,10 @@ from muxp_area import *
 from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
-from os import path, replace, mkdir, sep
+from os import path, mkdir, sep
 from shutil import copy2
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
-from glob import glob #### NEEDED LATER TO SEARCH FOR DSF FILE ALSO IN Custom Scenery Folder
 from sys import argv, exit #### exit just for testing !!!####
 
 
@@ -568,7 +567,8 @@ class muxpGUI:
             self.muxp_status_label.config(text="muxp-file validation ERROR")
             self.info_label.config(text="Validation Error Code {}. Refer muxp.log for details.".format(error))
             return -2
-        log.info("muxpfile id: {} version: {} for area:{} with {} commands read.".format(update["id"], update["version"], update["area"], len(update["commands"])))
+        update["filename"] = filename  # needed for commands based on files
+        log.info("muxpfile {} with id: {} version: {} for area:{} with {} commands read.".format(update["filename"], update["id"], update["version"], update["area"], len(update["commands"])))
         
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
         scenery_packs = None # dictionary of scenery packs for according tiles
@@ -732,9 +732,15 @@ class muxpGUI:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index+1))
 
             if c["command"] == "extract_mesh_to_file":
-                obj_filename = self.runfile + ".obj"
+                obj_filename = update["filename"] + ".obj"
                 log.info("Extract mesh in polygon: {} to file {}".format(c["coordinates"], obj_filename))
                 a.extractMeshToObjFile(c["coordinates"], obj_filename)
+                if self.kmlExport:
+                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
+
+            if c["command"] == "insert_mesh_from_file":
+                obj_filename = update["filename"] + ".obj"
+                a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
             

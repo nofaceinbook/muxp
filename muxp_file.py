@@ -94,12 +94,13 @@ def validate_muxp(d, logname):
     MUST_COMMAND_PARAMETERS = {"cut_polygon" : ["coordinates"],
                                "cut_flat_terrain_in_mesh" : ["coordinates", "terrain", "elevation"],
                                "cut_spline_segment" : ["3d_coordinates", "terrain", "width", "profile_interval"],
-                               "update_network_levels" : ["coordinates" , "road_coords_drapped"],
+                               "update_network_levels" : ["coordinates", "road_coords_drapped"],
                                "limit_edges" : ["coordinates", "edge_limit"],
                                "update_raster_elevation" : ["coordinates", "elevation"],
                                "update_raster4spline_segment" : ["3d_coordinates", "width"],
                                "update_elevation_in_poly": ["coordinates", "elevation"],
-                               "extract_mesh_to_file": ["coordinates"]}
+                               "extract_mesh_to_file": ["coordinates"],
+                               "insert_mesh_from_file": ["coordinates", "terrain"]}
     
     PARAMETER_TYPES = {"command" : ["string"],   #this is just command-type
                        "_command_info" : ["string"],  #added below, includes full command including added info after '.' like cut_polygon.inner
