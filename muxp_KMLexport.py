@@ -44,32 +44,33 @@ def kmlExport2(dsf, boundaries, extract, filename):
     latS, latN, lonW, lonE = BoundingRectangle(all_vertices)
 
     #### Get index for raster pixel SW (yS, xW) for area to be exported
-    xW = abs(lonW - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-    yS = abs(latS - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
-    if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
-        xW = round(xW, 0)
-        yS = round(yS, 0)
-    xW = int(xW) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
-    yS = int(yS) 
-    
-    #### Get index for raster pixel NE (yN, xE) for area to be exported
-    xE = abs(lonE - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-    yN = abs(latN - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
-    Rcentricity = "point-centric"
-    if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
-        xE = round(xE, 0)
-        yN = round(yN, 0)
-        Rcentricity = "post-centric"
-    xE = int(xE) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
-    yN = int(yN) 
-    
-    #### Define relevant info for raster to be used later ####
-    Rwidth = dsf.Raster[0].width
-    xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-    xbase = int(dsf.Properties["sim/west"])
-    Rheight = dsf.Raster[0].height
-    ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-    ybase = int(dsf.Properties["sim/south"])
+    if len(dsf.Raster):  # check if dsf file has Raster definition, and skip this part if not
+        xW = abs(lonW - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yS = abs(latS - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
+            xW = round(xW, 0)
+            yS = round(yS, 0)
+        xW = int(xW) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
+        yS = int(yS)
+
+        #### Get index for raster pixel NE (yN, xE) for area to be exported
+        xE = abs(lonE - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yN = abs(latN - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        Rcentricity = "point-centric"
+        if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
+            xE = round(xE, 0)
+            yN = round(yN, 0)
+            Rcentricity = "post-centric"
+        xE = int(xE) #for point-centric, the outer edges of the pixels lie on the boundary of dsf, and just cutting to int should be right
+        yN = int(yN)
+
+        #### Define relevant info for raster to be used later ####
+        Rwidth = dsf.Raster[0].width
+        xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
+        xbase = int(dsf.Properties["sim/west"])
+        Rheight = dsf.Raster[0].height
+        ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
+        ybase = int(dsf.Properties["sim/south"])
 
 
 
@@ -88,25 +89,26 @@ def kmlExport2(dsf, boundaries, extract, filename):
         f.write("<Style id=\"Area\"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>\n")
         
         ############## Style definitions for Raster Pixels ################
-        f.write("<Style id=\"Raster0\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80998066</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster1\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80edefbe</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster2\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80efff00</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster3\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>808fffff</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster4\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>8000beff</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster5\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>806596ff</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster6\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>806060ff</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster7\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>802c1ad3</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster8\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>8020206b</color></PolyStyle></Style>\n")
-        f.write("<Style id=\"Raster9\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80131340</color></PolyStyle></Style>\n")
-        minelev = 10000
-        maxelev = -500
-        for x in range(xW, xE+1):
-            for y in range (yS, yN+1):
-                if dsf.Raster[0].data[x][y] < minelev:
-                    minelev = dsf.Raster[0].data[x][y]
-                if dsf.Raster[0].data[x][y] > maxelev:
-                    maxelev = dsf.Raster[0].data[x][y]
-        elevsteps = (maxelev - minelev) / 10  + 0.01 #add small value that the maxvalue is in last elevstep included
+        if len(dsf.Raster):  # check if dsf file has Raster definition, and skip this part if not
+            f.write("<Style id=\"Raster0\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80998066</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster1\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80edefbe</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster2\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80efff00</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster3\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>808fffff</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster4\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>8000beff</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster5\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>806596ff</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster6\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>806060ff</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster7\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>802c1ad3</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster8\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>8020206b</color></PolyStyle></Style>\n")
+            f.write("<Style id=\"Raster9\"><LineStyle><color>ff000000</color><width>1</width></LineStyle><PolyStyle><color>80131340</color></PolyStyle></Style>\n")
+            minelev = 10000
+            maxelev = -500
+            for x in range(xW, xE+1):
+                for y in range (yS, yN+1):
+                    if dsf.Raster[0].data[x][y] < minelev:
+                        minelev = dsf.Raster[0].data[x][y]
+                    if dsf.Raster[0].data[x][y] > maxelev:
+                        maxelev = dsf.Raster[0].data[x][y]
+            elevsteps = (maxelev - minelev) / 10  + 0.01 #add small value that the maxvalue is in last elevstep included
         
         ########### Show boundaries as Areas ################
         for boundary in boundaries:     
@@ -116,30 +118,31 @@ def kmlExport2(dsf, boundaries, extract, filename):
             f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")        
 
         ######### Export Raster #################
-        f.write("<Folder><name>Raster {}x{} ({})from {}m to {}m </name>\n".format(Rwidth, Rheight, Rcentricity, minelev, maxelev))
-        elevfolders = [[], [], [], [], [], [], [], [], [], []]
-        if Rcentricity == "post-centric": #if post-centricity we have to move dem pixel half width/hight to left/down in order to get pixel center on border of dsf tile
-            cx = 0.5 * xstep 
-            cy = 0.5 * ystep
-        else:
-            cx = 0
-            cy = 0
-        for x in range(xW, xE+1):
-            for y in range (yS, yN+1):
-                folder = int((dsf.Raster[0].data[x][y] - minelev)/elevsteps)
-                elevfolders[folder].append("    <Placemark><name>Pixel {}:{} at {} m</name><styleUrl>#Raster{}</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n".format(x, y, dsf.Raster[0].data[x][y], folder ))
-                elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
-                elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + (y+1)*ystep - cy, dsf.Raster[0].data[x][y] ))
-                elevfolders[folder].append("        {},{},{}\n".format(xbase + (x+1)*xstep - cx, ybase + (y+1)*ystep - cy, dsf.Raster[0].data[x][y] ))
-                elevfolders[folder].append("        {},{},{}\n".format(xbase + (x+1)*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
-                elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
-                elevfolders[folder].append("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
-        for folder in range(10):
-            f.write("<Folder><name>Raster from {}m to {}m</name>\n".format(int(minelev + folder*elevsteps), int(minelev + (folder+1)*elevsteps)))
-            for line in elevfolders[folder]:
-                f.write(line)
+        if len(dsf.Raster):  # check if dsf file has Raster definition, and skip this part if not
+            f.write("<Folder><name>Raster {}x{} ({})from {}m to {}m </name>\n".format(Rwidth, Rheight, Rcentricity, minelev, maxelev))
+            elevfolders = [[], [], [], [], [], [], [], [], [], []]
+            if Rcentricity == "post-centric": #if post-centricity we have to move dem pixel half width/hight to left/down in order to get pixel center on border of dsf tile
+                cx = 0.5 * xstep
+                cy = 0.5 * ystep
+            else:
+                cx = 0
+                cy = 0
+            for x in range(xW, xE+1):
+                for y in range (yS, yN+1):
+                    folder = int((dsf.Raster[0].data[x][y] - minelev)/elevsteps)
+                    elevfolders[folder].append("    <Placemark><name>Pixel {}:{} at {} m</name><styleUrl>#Raster{}</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n".format(x, y, dsf.Raster[0].data[x][y], folder ))
+                    elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
+                    elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + (y+1)*ystep - cy, dsf.Raster[0].data[x][y] ))
+                    elevfolders[folder].append("        {},{},{}\n".format(xbase + (x+1)*xstep - cx, ybase + (y+1)*ystep - cy, dsf.Raster[0].data[x][y] ))
+                    elevfolders[folder].append("        {},{},{}\n".format(xbase + (x+1)*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
+                    elevfolders[folder].append("        {},{},{}\n".format(xbase + x*xstep - cx, ybase + y*ystep - cy, dsf.Raster[0].data[x][y] ))
+                    elevfolders[folder].append("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
+            for folder in range(10):
+                f.write("<Folder><name>Raster from {}m to {}m</name>\n".format(int(minelev + folder*elevsteps), int(minelev + (folder+1)*elevsteps)))
+                for line in elevfolders[folder]:
+                    f.write(line)
+                f.write("</Folder>\n")
             f.write("</Folder>\n")
-        f.write("</Folder>\n")
 
         ########### Export Trias per Patch ##############
         for p_num in patchTrias:

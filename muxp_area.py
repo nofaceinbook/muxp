@@ -557,6 +557,9 @@ class muxpArea:
         borderv = sortPointsAlongPoly(borderv, poly)
         borderv = borderv[borderv.index(min(borderv)):] + borderv[:borderv.index(min(borderv))]
         #  borderv start now with the most south-west corner
+        borderv.append(borderv[0])  # make it a closed poly
+        if not IsClockwise(borderv):
+            borderv.reverse()  # outer polygon for later triangulation should be clockwise
         for v in borderv:
             self.log.info("Border Vertex after Cut: {}".format(v))
         center = [0, 0, 0]  # in case file has no info on center
@@ -629,18 +632,38 @@ class muxpArea:
                     next_v_found = True
                     break
             if not next_v_found:
-                self.log.error("Mesh to be inserted is not continuous. Seems to have holes. It can not be inserted!")
-                return -1
-        oe_poly.append(next_v)  # last edge back to first vertex inserted
+                self.log.error("Mesh to be inserted is not continuous. Following part missing in insertion {}!".format(outer_edges))
+                #return -1   #### TBD: Two types of errors to distinghuish. Coming back to first vertex or not
         self.log.info("Outer Edges as Poly: {}".format(oe_poly))
         for i in range(len(oe_poly)):
             oe_poly[i] = vertices[oe_poly[i]]
         oe_poly = oe_poly[oe_poly.index(min(oe_poly)):] + oe_poly[:oe_poly.index(min(oe_poly))]
         #  oe_poly start now with the most south-west corner
+        oe_poly.append(oe_poly[0])  # make it a closed poly
+        if IsClockwise(oe_poly):
+            oe_poly.reverse()  # inner poly for triangulation should be anti-clockwise
         self.log.info("Outer Edges as Poly: {}".format(oe_poly))
-        ### SET now oe_poly and borderv to correct winding
-        ### Triangulate now polys connected at their SW corner
-        ### SET elevation of new triangulated polygons base on elevation of exising vertices at that coordinated
+        borderland = borderv + oe_poly   # area between inner/outer poly to be triangulated, not closed for earclip
+        trias = earclipTrias(borderland)
+        for tria in trias:
+            new_v = [None, None, None]
+            for e in range(3):
+                elev_found = False  # go through all existing vertices of trias to find elevation at coords
+                for t in self.atrias:
+                    for v in range(3):
+                        if (round(tria[e][0], 7), round(tria[e][1], 7)) == (round(t[v][0], 7), round(t[v][1], 7)):
+                            elev = t[v][2]
+                            elev_found = True
+                            self.log.info("Elevation of borderland vertex {} is {}".format(tria[e], elev))
+                    if elev_found: break
+                if not elev_found:
+                    self.log.error("No elevation found for borderland vertex: {}. Mesh not inserted!".format(tria[e]))
+                    return -2
+                new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
+                # This version only creates simple vertices without vertex normals and without s/t coordinates
+            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
+            # As tria is completely new, there is no pool/patchID where tria is inside, so None
+        return borderland
 
     
     def createDSFVertices(self, elevscal=1):

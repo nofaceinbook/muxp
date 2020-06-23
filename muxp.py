@@ -740,9 +740,11 @@ class muxpGUI:
 
             if c["command"] == "insert_mesh_from_file":
                 obj_filename = update["filename"] + ".obj"
-                a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
+                borderlandpoly = a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
+                elevation_scale = 0.05  # allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
+                ########## OPEN: HOW TO LEAVE existing vertices with -32768 ???
                 if self.kmlExport:
-                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
+                    kmlExport2(self.dsf, [c["coordinates"], borderlandpoly], a.atrias, kml_filename + "_{}".format(c_index + 1))
             
             if c["command"] == "update_network_levels":
                 ###### tbd: put details below to separate file like mux.area.py #################
