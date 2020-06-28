@@ -485,7 +485,7 @@ class muxpGUI:
         if filename.find(self.muxpfolder) == 0: #selected file is in muxpfolder
             filenames[2] = self.xpfolder + "/Global Scenery/X-Plane 11 Global Scenery" + filename[-35:] #then orignial dsf is in global scenery --> should just take the relevant bytes identical in Global Scenery #### TO BE TESTED #####
             log.info("Tile in muxpfolder was selected, so original file is default scenery: {}".format(filenames[2]))
-        for i,f in enumerate(filenames): ### TBD: Define all file extensions AND directory names globally
+        for i, f in enumerate(filenames): ### TBD: Define all file extensions AND directory names globally
             log.info("Evaluating conflicts for: {} {}".format(i, f))
             if path.exists(f):
                 err, props[i] = getDSFproperties(f)
@@ -512,10 +512,16 @@ class muxpGUI:
         scenerylabel = [None, None, None]
         scenerybutton = [None, None, None]
         Label(conflictwin, text="================================================================================").grid(column=0, row=1, columnspan=3)
-        for i,dsftype in enumerate(["CURRENT", "BACKUP", "ORIGINAL"]):
+        dsftype_def = ["CURRENT", "BACKUP", "ORIGINAL"]
+        for i, dsftype in enumerate(dsftype_def):
             scenerylabel[i] = Label(conflictwin, anchor='w', justify=LEFT, text=dsftype+" DSF FILE:\n   filename: "+filenames[i]+"\n   issue: " + issues[i] + "\n   Included mesh updates:\n" + muxes[i])
             scenerylabel[i].grid(row=2*i+2, column=0, columnspan=2)
-            scenerybutton[i] = Button(conflictwin, text=' Update ', command = lambda: done(dsftype)) #### TBD: Colors based on issue ####
+            if i == 0:
+                scenerybutton[0] = Button(conflictwin, text=' Update ', command=lambda: done(dsftype_def[0]))
+            elif i == 1:
+                scenerybutton[1] = Button(conflictwin, text=' Update ', command=lambda: done(dsftype_def[1]))
+            elif i == 2:
+                scenerybutton[2] = Button(conflictwin, text=' Update ', command=lambda: done(dsftype_def[2]))
             scenerybutton[i].grid(row=2*i+2, column=2)
             Label(conflictwin, text="================================================================================").grid(column=0, row=2*i+3, columnspan=3)
             if issues[i] == "File does not exist!":
@@ -606,7 +612,7 @@ class muxpGUI:
         if self.conflictStrategy == "CANCEL":
             log.info("CANCEL was chosen in conflict handling.")
             exit(0)
-        log.info("Conflict Strategy {} resulting in follwing dsf file to adapt: {}".format(self.conflictStrategy, dsf_filename))
+        log.info("Conflict Strategy {} resulting in following dsf file to adapt: {}".format(self.conflictStrategy, dsf_filename))
         if dsf_filename.find("X-Plane 11 Global Scenery") >= 0: #X-Plane default scenery selected  ### TBD: Define String globally to be replaced if it changes #####
             log.info("Adapting default scenery which will then be available in defined muxp folder.")
             self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery" #make sure that really the right pack is set
