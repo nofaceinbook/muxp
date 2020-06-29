@@ -786,7 +786,30 @@ class muxpGUI:
                 shown_polys.append(c["coordinates"]) 
                 if self.kmlExport:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
-                    
+
+            if c["command"] == "cut_ramp":
+                ###### tbd: support further values like terrain and accuracy ####################
+                elev_placeholder = 333333  # first set this elevation to all cut vertices and then replace by ramp
+                polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], elev_placeholder)
+                ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
+                ramp_tria[0][0], ramp_tria[0][1] = ramp_tria[0][1], ramp_tria[0][0]  # 3d coords currently
+                ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
+                ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
+                log.info("Following Tria is used for ramp elevation: {}".format(ramp_tria))
+                for t in a.atrias:
+                    for v in range(3):
+                        if t[v][2] == elev_placeholder:  # adapt all marked vertices with elev. from position on ramp
+                            l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
+                            t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
+                            log.info("Vertex at {} set to ramp-elevation {} with l0={} and l1={}".format(t[v][:2], t[v][2], l0, l1))
+                elevation_scale = 0.05  # allows 5cm elevation steps  #### TBD: Make this value configurable in command
+                shown_polys = polysouter
+                for pol in shown_polys:
+                    pol.append(pol[0])  # polys are returned without last vertex beeing same as first
+                shown_polys.append(c["coordinates"])
+                if self.kmlExport:
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
+
             if c["command"] == "cut_flat_terrain_in_mesh":
                 polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
                 ########### TBD: CutPoly should not change elevation, so it would not needed to give parameter None !!! ############
@@ -795,6 +818,7 @@ class muxpGUI:
                 ### NOTE: even if only elevation for terrain is set, the new changed trias will create different looking terrain also outside terrain mesh
                 a.createPolyTerrain(c["coordinates"], c["terrain"], c["elevation"])
                 for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
+                    ########### TBD: borderv are not sorted along poly --> SORT THEM FIRST USING NEW FUNCTION FOR INSERTING MESH .obj FILE !!!!!!!!!
                     a.splitCloseEdges(vertex)
                 shown_polys = polysouter
                 for pol in shown_polys:

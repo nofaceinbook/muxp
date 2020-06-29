@@ -92,6 +92,7 @@ def validate_muxp(d, logname):
     OPTIONAL_BASE_VALUES = ["description", "author"] #only strings are allowed optional
 
     MUST_COMMAND_PARAMETERS = {"cut_polygon" : ["coordinates"],
+                               "cut_ramp" : ["coordinates", "3d_coordinates"],
                                "cut_flat_terrain_in_mesh" : ["coordinates", "terrain", "elevation"],
                                "cut_spline_segment" : ["3d_coordinates", "terrain", "width", "profile_interval"],
                                "update_network_levels" : ["coordinates", "road_coords_drapped"],
