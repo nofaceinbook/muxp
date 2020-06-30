@@ -41,6 +41,6 @@ Running muxp is just to select the muxp file including mesh changes. When no err
 
 ## Manual for Scenery Developers
 
-The developer needs to define the *.muxp* file. As these file are in yaml file format you could name the file also *.yaml* at the end and make use of editors supporting yaml files. In future I will set up a wiki including all details on the file structure and possible commands. For the moment I can just offer you to look at the [examples](https://github.com/nofaceinbook/muxp/tree/master/muxpfiles) and some more information athttps://forums.x-plane.org/index.php?/forums/topic/208622-announcing-muxp-%E2%80%93-mesh-updater-x-plane/ --> also follow the links inside this article with descriptions on examples.
+The developer needs to define the *.muxp* file. As these file are in yaml file format you could name the file also *.yaml* at the end and make use of editors supporting yaml files. In future I will set up a wiki including all details on the file structure and possible commands. For the moment I can just offer you to look at the [examples](https://github.com/nofaceinbook/muxp/tree/master/muxpfiles) and some more information at https://forums.x-plane.org/index.php?/forums/topic/208622-announcing-muxp-%E2%80%93-mesh-updater-x-plane/ --> also follow the links inside this article with descriptions on examples.
 
 
