@@ -1,0 +1,17 @@
+muxp_version: 0.1
+id: ConservancyAirfieldWookie
+version: 0.1
+description: Updating mesh for Santa Cruz Island Conservancy Airfield from Wookie
+author: schmax
+tile: +33-120
+area: 33.98637750824201 33.99455236656082 -119.6876630134461 -119.6714200819356
+
+cut_spline_segment.runway:
+    width: 80.0
+    profile_interval: 50
+    terrain: lib/g10/terrain10/apt_tmp_dry.ter
+    3d_coordinates:
+    - 33.99043821639725 -119.6837340419466 129.0
+    - 33.99019362747968 -119.6827119674874 128.0
+    - 33.98898730886092 -119.6778783283238 101.0
+    - 33.98867572279772 -119.67664022262 99.0

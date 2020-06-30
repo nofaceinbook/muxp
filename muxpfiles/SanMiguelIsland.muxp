@@ -1,0 +1,26 @@
+muxp_version: 0.1
+id: SanMiguelIslandAirstrip
+version: 0.1
+description: Updating mesh for San Miguel Island Airstrip from Wookie
+author: schmax
+tile: +34-121
+area: 34.03390698615984 34.04155934259581 -120.3541321206873 -120.343290779045
+
+limit_edges.around_airport:
+    edge_limit: 250
+    coordinates:
+    - 34.03426127559233 -120.3533598327656
+    - 34.03418195405123 -120.3439577406992
+    - 34.04105019796306 -120.3435319699262
+    - 34.04108537397114 -120.3538113221587
+    - 34.03426127559233 -120.3533598327656
+
+cut_spline_segment.runway:
+    width: 40.0
+    profile_interval: 50
+    terrain: lib/g10/terrain10/apt_tmp_dry.ter
+    3d_coordinates:
+    - 34.03893388435212 -120.3512972330531 -32768.0
+    - 34.03750946003318 -120.3495800858561 -32768.0
+    - 34.0364692019426 -120.348332576047 -32768.0
+    - 34.03532232502786 -120.3469842744225 -32768.0

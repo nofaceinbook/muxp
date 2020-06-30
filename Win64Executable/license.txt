@@ -1,0 +1,28 @@
+The executable Windows 64 bit program "muxp.exe" was created by schmax 2020 using or including the following software:
+
+"PyInstaller" version 3.4 for creating the exe-file from python scripts. 
+PyInstaller is licensed under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2 of the License,
+or (at your option) any later version. For more details refer to:
+https://raw.githubusercontent.com/pyinstaller/pyinstaller/develop/COPYING.txt 
+Many thanks to the development team for this great tool.
+
+Open Source Python release from the Python Software Foundation. Refer to
+https://docs.python.org/3/license.html#psf-license-agreement-for-python-release
+for more details.
+I love this programming language.
+
+The library pylzma for reading 7zip-archive files (in that case zipped dsf-files).
+The code and license info can be found in github: https://github.com/fancycode/pylzma
+It is published under GNU Lesser General Public License v2.1. 
+Many thanks to Joachim Bauch.
+
+Earclip triangulation algorithm
+https://github.com/mrbaozi/triangulation
+published under MIT license, thaks to mraboazi
+
+And finally my own written python scripts you can find also in github: 
+https://github.com/nofaceinbook/muxp
+These are published under GNU General Public License v3.0. Read the according License file for more details.
+
+BE AWARE THAT EVERYTHING DELIVERED IS DELIVERED AS IS WITHOUT WARRENTY AND WITHOU LIABILITY.
