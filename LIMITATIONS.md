@@ -9,4 +9,4 @@ The program ist in its early development and has thus currently several limitati
 
 * **No automated zipping of updated dsf files:** The updated dsf files are not zipped automatically. Meaning that they will be larger than original files and consuming more space on your drive. However you can manually 7zip them in arhcives for them moment.
 
-* **Missing documentation:** There is up to now no full documentation. Check the files her in GitHub or at https://forums.x-plane.org/index.php?/forums/topic/209905-upating-mesh-with-muxp-a-first-example/
+* **Missing documentation:** There is up to now no full documentation. Check the files her in GitHub or at  https://forums.x-plane.org/index.php?/forums/topic/208622-announcing-muxp-%E2%80%93-mesh-updater-x-plane/ --> also follow the links inside this article with descriptions on examples.
