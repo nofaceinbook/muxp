@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.0 exp"
+muxp_VERSION = "0.2.1 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -21,12 +21,6 @@ muxp_VERSION = "0.2.0 exp"
 #   <http://www.gnu.org/licenses/>. 
 #
 # ******************************************************************************
-
-# New in 0.2.0: update_elevation_in_poly command
-# New in 0.2.0: updated that in activatePack the scenery where packs is inserted in ini file is not lost
-# New in 0.2.0: Allow additional configurations to be set and saved in .config
-# New in 0.2.0: In activateSceneryPack creat also scenery_packs.beforeMUXP if not yet exists
-# New in 0.2.0: If default scenery is set as source in .config than first checks muxpfolder if this tile exists to be updated
 
 from logging import StreamHandler, FileHandler, getLogger, Formatter
 from muxp_math import *
@@ -141,7 +135,7 @@ class muxpGUI:
         if muxpfile != None: #if muxpfile was given, select it in field
             self.select_muxpfile(self.muxpfile_entry, muxpfile)
         
-        error = self.getConfig(runfile)
+        error = self.getConfig()
         if error: #in case of config error, config has to be defined
             displayNote(self.window, "Configuration file 'muxp.config' not found (check muxp.log) or\nyou are starting muxp the first time.\n\n" +
                                      "When you start muxp the first time you need to set X-Plane folder and \na folder for the updated default dsf files.\n" +
@@ -157,10 +151,9 @@ class muxpGUI:
             mainloop()
 
 
-    def getConfig(self, runfile):
+    def getConfig(self):
         """
         Gets configuration from muxp.config from same directory as runfile.
-        Opens ConfigMenu if file is not present and creates file.
         """
         filename = self.runfile[:self.runfile.rfind('.')]+'.config'
         log.info("Searching Config File: {}".format(filename))
@@ -185,7 +178,7 @@ class muxpGUI:
             return -3 #error value
         self.xpfolder = c["xpfolder"].strip()
         if self.xpfolder.find("[INSIDE]") == 0:  # Allow to get X-Plane folder based on current folder where run/config file is in
-            head, tail = path.split(path.abspath(path.dirname(runfile)))
+            head, tail = path.split(path.abspath(path.dirname(self.runfile)))
             while len(tail) > 0:
                 if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
                     self.xpfolder = head.replace(sep, '/')  # setting for all OS the correct separators in filename
@@ -198,7 +191,7 @@ class muxpGUI:
                 return -3
         self.muxpfolder = c["muxpfolder"].strip()
         if self.muxpfolder.find("[THIS_FOLDER]") == 0: 
-            self.muxpfolder = path.abspath(path.dirname(runfile))
+            self.muxpfolder = path.abspath(path.dirname(self.runfile))
             self.muxpfolder = self.muxpfolder.replace(sep, '/')  # setting for all OS the correct separators in filename
             log.info("Set MUXP folder to: {}".format(self.muxpfolder))
         if "kmlExport" in c:
@@ -216,6 +209,7 @@ class muxpGUI:
         if not path.exists(self.muxpfolder):
             log.error("The following seems not to be the right path to muxp-folder with updated dsf-files: {}".format(self.muxpfolder))
             return -5
+        ### Now check if optional values are in file and read values
         if "dsfSourcePack" in c: #This path is relative from xpfolder
             self.dsf_sceneryPack = c["dsfSourcePack"].strip()
             if self.dsf_sceneryPack != "[ACTIVE]" and not path.exists(self.xpfolder + "/" + c["dsfSourcePack"]):
@@ -223,15 +217,21 @@ class muxpGUI:
                 self.dsf_sceneryPack = ""
             else:
                 log.info("Scenery Source Package set to: {}".format(self.dsf_sceneryPack))
+        else:
+            self.dsf_sceneryPack = ""
         if "conflictStrategy" in c:
             self.conflictStrategy = c["conflictStrategy"].strip()
             log.info("Conflict Strategy for multiple changes in same DSF file set to: {}".format(self.conflictStrategy))
+        else:
+            self.conflictStrategy = ""
         if "activatePack" in c:
             try:
                 self.activatePack = int(c['activatePack'])
             except ValueError:
                 log.error("activatePack is not of type int; value not updated")
-            log.info("activatePack set to: {}".format(self.activatePack))        
+            log.info("activatePack set to: {}".format(self.activatePack))
+        else:
+            self.activatePack = 0
         return 0 #no error
 
         
@@ -253,7 +253,8 @@ class muxpGUI:
         entry.delete(0, END)
         entry.insert(0, filename)
         self.muxp_start.config(state="normal")
-        self.muxpfile_select.config(state="disabled")
+        self.muxp_status_label.config(text="   this can take some minutes....")
+        self.info_label.config(text="")
 
 
     def create_muxpfolder(self, xpfolder, info_label, muxpfolder_entry):
@@ -345,8 +346,8 @@ class muxpGUI:
                 else:
                     new_infile.append(line) #just keep line
             if not pack_activated:
-                new_infile.append("SCENERY_PACK {}/\n".format(pack)) # '/' required in ini to be a correct path
-                log.info("Added new scerny pack for at end of scenery_packs.ini.")
+                new_infile.append("SCENERY_PACK {}/\n".format(pack))  # '/' required in ini to be a correct path
+                log.info("Added new scenery pack for at end of scenery_packs.ini.")
         with open(inifile, "w", encoding="utf8", errors="ignore") as f:
             for line in new_infile:
                 f.write(line)
@@ -364,6 +365,7 @@ class muxpGUI:
             entry.delete(0, END)
             entry.insert(0, self.dsf_sceneryPack)
             self.dsf_sceneryPack = save_current_self_dsf_sceneryPack #by this it is assured that self.dsf_sceneryPack is only changed after pressing Save
+        self.getConfig()  # always read config from file first to not overwrite settings that changed while processing
         configwin = Toplevel(self.window)
         configwin.attributes("-topmost", True)
         toplabel = Label(configwin, anchor=W, justify=LEFT, text="---  S E T T I N G S   F O R    M U X P  ---").grid(row=0, column=0, columnspan=2, pady=10, padx=10)
@@ -552,6 +554,21 @@ class muxpGUI:
         """
         Initiates updating the mesh based on the muxp file (filename).
         """
+        ########## GUI SETTINGS AFTER / DURING RUN ################
+        self.muxpfile_select.config(state="disabled")  # disable select option while running
+        self.muxp_start.config(state="disabled")  # also disable a start while running
+        self.config_button.config(state="disabled")
+        def showRunResult(status, info, err=False):  # shows results/errors and re-sets GUI after run
+            self.muxp_status_label.config(text=status)
+            self.info_label.config(text=info)
+            self.muxpfile_select.config(state="normal")
+            self.config_button.config(state="normal")
+            if err:
+                log.error(status + " // " + info)
+            else:
+                log.info(status + " // " + info)
+            self.getConfig()  # re-set all config variables based on config.file for next run
+
         ########## IN CASE OF .kml FILE CONVERT TO MUXP FIRST #########
         if filename.rfind(".kml") == len(filename) - 4:  # filename ends with '.kml'
             log.info("Converting kml file: {} to muxp-file.".format(filename))
@@ -561,17 +578,14 @@ class muxpGUI:
         ############# READ AND EVALUATE MUXP FILE #####################
         update, error = readMuxpFile(filename, LogName)
         if update == None:
-            self.muxp_status_label.config(text="muxp-file ERROR")
-            self.info_label.config(text="MUXP-file {} not found.".format(filename))
-            log.error("MUXP-file {} not found.".format(filename))
+            showRunResult("muxp-file ERROR", "MUXP-file {} not found.".format(filename), True)
             return -1
         error, resultinfo = validate_muxp(update, LogName) 
         log.info("Command Dictionary: {}".format(update))
         if error: #positive values mean that processing can still be performed
             displayNote(self.window, resultinfo + "\nCheck muxp.log for details.")
         if error < 0: #In case of real erros, processing Muxp has to be stopped
-            self.muxp_status_label.config(text="muxp-file validation ERROR")
-            self.info_label.config(text="Validation Error Code {}. Refer muxp.log for details.".format(error))
+            showRunResult("muxp-file validation ERROR", "Validation Error Code {}. Refer muxp.log for details.".format(error), True)
             return -2
         update["filename"] = filename  # needed for commands based on files
         log.info("muxpfile {} with id: {} version: {} for area:{} with {} commands read.".format(update["filename"], update["id"], update["version"], update["area"], len(update["commands"])))
@@ -610,8 +624,8 @@ class muxpGUI:
             dsf_filename = dsf_output_filename #no conflict so take default (in case of X-Plane default scenery this is clarified below)
             log.info("Conflict Strategey was set to IGNORE, so no check for conflicts!")
         if self.conflictStrategy == "CANCEL":
-            log.info("CANCEL was chosen in conflict handling.")
-            exit(0)
+            showRunResult("Nothing updated!", "CANCEL was chosen in conflict handling.")
+            return 1
         log.info("Conflict Strategy {} resulting in following dsf file to adapt: {}".format(self.conflictStrategy, dsf_filename))
         if dsf_filename.find("X-Plane 11 Global Scenery") >= 0: #X-Plane default scenery selected  ### TBD: Define String globally to be replaced if it changes #####
             log.info("Adapting default scenery which will then be available in defined muxp folder.")
@@ -629,6 +643,7 @@ class muxpGUI:
         ############## START PROCESSING MUXP FILE ON DSF FILE ################
         muxp_process_error = self.processMuxp(dsf_filename, update)  ### Returns return value of processing
         if muxp_process_error:
+            showRunResult("Error {} while updating mesh".format(muxp_process_error), "No update saved!", True)
             return muxp_process_error #No writing of dsf file in case of error
 
         ########## UPDATE PROPERTIES OF DSF ACCORDING TO PROCESSED MUXP FILE #############
@@ -657,9 +672,7 @@ class muxpGUI:
         if dsf_filename.find("X-Plane 11 Global Scenery") >= 0: #X-Plane default scenery selected, so file need to be written to muxp Folder
             #Check that all required folders for writing updated dsf to muxp folder do exist and create if missing
             if not path.exists(self.muxpfolder):
-                log.error("muxpfolder for saving dsf updates does not exisit: {}".format(self.muxpfolder))
-                self.muxp_status_label.config(text="muxp-folder ERROR")
-                self.info_label.config(text="muxpfolder {} not existing.".format(self.muxpfolder))
+                showRunResult("muxp-folder ERROR", "muxpfolder {} not existing".format(self.muxpfolder), True)
                 return -70 #error
             if not path.exists(self.muxpfolder + "/Earth nav data"):
                 mkdir(self.muxpfolder + "/Earth nav data")
@@ -670,7 +683,7 @@ class muxpGUI:
                 log.info("Created new 10grid folder in muxpfolder: {}".format(writefolder))
             #dsf_output_filename = writefolder + "/" + update["tile"] +".dsf" ## already set above
         log.info("Writing updated dsf file to: {}".format(dsf_output_filename))
-        self.dsf.write(dsf_output_filename)   ### TBD: Error checking if writing fails ################
+        self.dsf.write(dsf_output_filename)
         
         #################### ACTIVATE SCENERY PACK ################
         if self.activatePack:
@@ -692,7 +705,8 @@ class muxpGUI:
                         before_packs.append(scen)
                 log.info("Updateing scnery_packs.ini and inserting new pack {} before {} in order that this scenery will be activated in X-Plane".format(newSceneryPack, before_packs))
                 self.activateSceneryPack(newSceneryPack, before_packs)
-        
+
+        showRunResult("Finished Mesh Update {} successful".format(path.basename(filename)), "Scenery Pack {} adapted.".format(self.dsf_sceneryPack))
         return 0 #processed muxp without error    
         
     def processMuxp(self, filename, update):
