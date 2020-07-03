@@ -643,7 +643,10 @@ class muxpGUI:
         ############## START PROCESSING MUXP FILE ON DSF FILE ################
         muxp_process_error = self.processMuxp(dsf_filename, update)  ### Returns return value of processing
         if muxp_process_error:
-            showRunResult("Error {} while updating mesh".format(muxp_process_error), "No update saved!", True)
+            if muxp_process_error == 99:  # special command for exiting without update
+                showRunResult("Muxp file includes exit command.", "No update saved!", False)
+            else:
+                showRunResult("Error {} while updating mesh".format(muxp_process_error), "No update saved!", True)
             return muxp_process_error #No writing of dsf file in case of error
 
         ########## UPDATE PROPERTIES OF DSF ACCORDING TO PROCESSED MUXP FILE #############
@@ -742,7 +745,7 @@ class muxpGUI:
             log.info("PROCESSING COMMAND: {}".format(c))
             
             if c["command"] == "update_elevation_in_poly":
-                log.info("Updateing elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
+                log.info("Updating elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
                 for t in a.atrias: #go through all trias in area
                     for i, p in enumerate(t[0:3]): #all their points
                         if PointInPoly(p[0:2], c["coordinates"]):
@@ -752,17 +755,19 @@ class muxpGUI:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index+1))
 
             if c["command"] == "extract_mesh_to_file":
-                obj_filename = update["filename"] + ".obj"
+                head, tail = path.split(update["filename"])
+                obj_filename = path.join(head, c["name"])
                 log.info("Extract mesh in polygon: {} to file {}".format(c["coordinates"], obj_filename))
                 a.extractMeshToObjFile(c["coordinates"], obj_filename)
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
 
             if c["command"] == "insert_mesh_from_file":
-                obj_filename = update["filename"] + ".obj"
+                head, tail = path.split(update["filename"])
+                obj_filename = path.join(head, c["name"])
                 borderlandpoly = a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
                 elevation_scale = 0.05  # allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
-                ########## OPEN: HOW TO LEAVE existing vertices with -32768 ???
+                ########## OPEN: HOW TO LEAVE existing vertices with -32768 ???  --> should work
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"], borderlandpoly], a.atrias, kml_filename + "_{}".format(c_index + 1))
             
@@ -940,7 +945,10 @@ class muxpGUI:
                             log.info("Set raster {} to elevation: {}m".format(raster_index, round(elev)))
                             break
                 if self.kmlExport:
-                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_{}".format(c_index+1))                        
+                    kmlExport2(self.dsf, raster_bounds, a.atrias, kml_filename + "_{}".format(c_index+1))
+
+            if c["command"] == "exit_without_update":
+                return 99
 
         log.info("DSF vertices created with scaling: {}".format(elevation_scale))
         self.muxp_status_label.config(text = "Creating new vertices and\n   insert mesh update in dsf file")  

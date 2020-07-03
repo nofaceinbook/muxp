@@ -29,7 +29,7 @@
 #                    Added function doBoundingRectanglesIntersect
 #Change since 0.1.7: check devision by zero in  max_tria_angle for malformed trias
 
-from math import sin, cos, atan2, acos, sqrt, radians, pi #for different calculations
+from math import sin, cos, atan2, tan, atan, acos, log, exp, sqrt, radians, degrees, pi #for different calculations
 
 def _linsolve_(a1, b1, c1, a2, b2, c2):  
     divisor = (a1 * b2) - (a2 * b1)
@@ -43,6 +43,22 @@ def intersection(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects 
         return (round((p1[0] + s0 * (p2[0] - p1[0])), 8), round(p1[1] + s0 * (p2[1] - p1[1]), 8))  ### returns the cutting point as tuple; ROUNDING TO ALWAYS GET SAME POINT 
     else:                    
         return None   ######### Removed () around none on 12.04.2020
+
+def lat2y(a):
+    RADIUS = 6378137.0  # in meters on the equator
+    return log(tan(pi / 4 + radians(a) / 2)) * RADIUS
+
+def lon2x(a):
+    RADIUS = 6378137.0  # in meters on the equator
+    return radians(a) * RADIUS
+
+def x2lon(a):
+    RADIUS = 6378137.0  # in meters on the equator
+    return degrees(a/RADIUS)
+
+def y2lat(a):
+    RADIUS = 6378137.0  # in meters on the equator
+    return degrees(2 * atan(exp(a/RADIUS)) - pi / 2)
 
 def distance(p1, p2): #calculates distance between p1 and p2 in meteres where p is pair of longitude, latitude values          
     R = 6371009 #mean radius earth in m

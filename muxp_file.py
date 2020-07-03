@@ -101,7 +101,8 @@ def validate_muxp(d, logname):
                                "update_raster4spline_segment" : ["3d_coordinates", "width"],
                                "update_elevation_in_poly": ["coordinates", "elevation"],
                                "extract_mesh_to_file": ["coordinates"],
-                               "insert_mesh_from_file": ["coordinates", "terrain"]}
+                               "insert_mesh_from_file": ["coordinates", "terrain"],
+                               "exit_without_update": []}
     
     PARAMETER_TYPES = {"command" : ["string"],   #this is just command-type
                        "_command_info" : ["string"],  #added below, includes full command including added info after '.' like cut_polygon.inner
@@ -196,6 +197,7 @@ def validate_muxp(d, logname):
             
         if c["command"] not in MUST_COMMAND_PARAMETERS: #check if supported command 
             log.warning("Command {}: {} NOT supported and skipped.".format(i, c["command"]))
+            log.info("These commands are supported: {} ".format(MUST_COMMAND_PARAMETERS))
             warnings += 1
             skipped_commands.add(i)
             continue

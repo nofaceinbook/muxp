@@ -519,25 +519,37 @@ class muxpArea:
         """
         extract_atrias = []  # list of area trias, that have to be extracted
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
+        normals = dict()  # dictionary for vertex normals
         for t in self.atrias:  # go through all trias in area
             if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
                 if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
-                    extract_atrias.append(t)
+                    extract_atrias.append(deepcopy(t))  #### NEW: Deepcopy, to be able to change elevation without effect
                     for v in range(3):
+                        extract_atrias[-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
                         vc = (round(t[v][0], 7), round(t[v][1], 7))
+                        vn = (round(t[v][3], 4), round(t[v][4], 4))
                         if vc not in vertices:
-                            vertices[vc] = [t[v][2], len(vertices)]
+                            #vertices[vc] = [t[v][2], len(vertices)]
+                            vertices[vc] = [self.dsf.getVertexElevation(*t[v][:3]), len(vertices)]
+                            ###### NEW: use always the elevation, no raster value -32768
+                        if vn not in normals:
+                            normals[vn] = len(normals)
         center = CenterInAtrias(extract_atrias)
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
             f.write("# muxp mesh extract with center: {} {} {}\n".format(center[0], center[1], center[2]))
-            f.write("# muxp lat-lon-scale: {}\n".format(scal))
+            #f.write("# muxp lat-lon-scale: {}\n".format(scal))
+            center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercartor projection
+            center[2] = round(center[2])  # center elevation also full meter
+            f.write("# using Mercartor projection with center: {} {} {}\n".format(center[0], center[1], center[2]))
             for vc in vertices:
-                f.write("v {} {} {}\n".format((vc[0] - center[0]) * scal, (vc[1] - center[1]) * scal,
-                                              (vertices[vc][0] - center[2])))
+                f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3), round(lat2y(vc[1]) - center[1], 3),
+                                              vertices[vc][0] - center[2]))
+            for vn in normals:
+                f.write("vn {} {} {}\n".format(vn[0], vn[1], sqrt(1 - vn[0]*vn[0] - vn[1]*vn[1])))
             for t in extract_atrias:
                 f.write("f")
                 for v in range(3):
-                    f.write(" {}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 1))
+                    f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 1, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 1))
                     # +1 as in .obj indices start with 1 instead 0
                 f.write("\n")
 
@@ -565,6 +577,7 @@ class muxpArea:
         center = [0, 0, 0]  # in case file has no info on center
         scale = 1  # in case file has no info on scale
         vertices = [[None]] #list of vertices to be read; first dummy element to match index starting with 1
+        normals = [[None]] #list of vertex normals to be read; first dummy element to match index starting with 1
         trias = []
         outer_edges = dict()  # dict with (v1_index, v2_index) as keya; at the end keys are all edges of poly outside
         with open(filename, encoding="utf8", errors="ignore") as f:
@@ -575,35 +588,53 @@ class muxpArea:
                     for i in range(len(center)):
                         center[i] = float(center[i])  ######### TBD: ERROR CHECKING
                     self.log.info("Coordinates read will be relative to center: {}".format(center))
-                if line.find("# muxp lat-lon-scale:") >= 0:
-                    scale = float(line[line.find(":") + 1:])
-                    self.log.info("Scale for lat/lon coordinates used is: {}".format(scale))
-                if line.find("v ") == 0:  # vertex definition in .obj file
+                    center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # change to Mercartor projection
+                    center[2] = round(center[2])
+                    self.log.info("  Center in Mercartor projection: {}".format(center))
+                #elif line.find("# muxp lat-lon-scale:") >= 0:
+                #    scale = float(line[line.find(":") + 1:])
+                #    self.log.info("Scale for lat/lon coordinates used is: {}".format(scale))
+                elif line.find("v ") == 0:  # vertex definition in .obj file
                     v = line.split()
                     v.pop(0)  # remove first element 'v' from list
-                    for i in range(len(v)):
-                        if i < 2:
-                            v[i] = float(v[i]) / scale + center[i]   ######### TBD: ERROR CHECKING
-                        else:
-                            v[i] = float(v[i]) + center[i]   ######### TBD: ERROR CHECKING
+                    v[0], v[1] = x2lon(float(v[0]) + center[0]), y2lat(float(v[1]) + center[1])  # change from Mercartor projection
+                    v[2] = float(v[2]) + center[2]       ######### TBD: ERROR CHECKING when converting from float !!!!
+                    #for i in range(len(v)):
+                    #    if i < 2:
+                    #        v[i] = float(v[i]) / scale + center[i]
+                    #    else:
+                    #        v[i] = float(v[i]) + center[i]   ######### TBD: ERROR CHECKING
                     vertices.append(v)
-                if line.find("f ") == 0:  # face definition in .obj file
-                    # IMPORTANT: THIS VERSION ASSUMES ONLY V INFO AND NOT VN, VT .... !!!!!!!!!!!!!!!!
-                    f = line.split()
+                elif line.find("vn ") == 0:  # vertex normal definition in .obj file
+                    vn = line.split()
+                    vn.pop(0)  # remove 'vn' from list
+                    normals.append([float(vn[0]), float(vn[1]), float(vn[2])])
+                    self.log.info("Vertex normal read: {}".format(normals[-1]))  #### JUST FOR TESTING, TO BE REMOVED !!! #####
+                elif line.find("f ") == 0:  # face definition in .obj file
+                    # IMPORTANT: THIS VERSION ASSUMES FACES AS V//VN and trias only!
+                    f = line.split()  ########## TBD: error checking that 3 values are returned
                     f.pop(0)  # remove first element 'f' from list
                     t = []  # new tria to be defined
-                    for i in range(len(f)):  ########## WHY len(f)??? Better check that it is 3 (we need trias)??? #######
-                        f[i] = int(f[i])  ######### TBD: ERROR CHECKING
-                    for i in range(len(f)):  ########## WHY len(f)??? see above, should be always 3
-                        t.append(vertices[f[i]])
-                        if f[i] < f[(i+1)%3]:
-                            edge_sorted = (f[i], f[(i+1)%3])
+                    fv = [None, None, None]  # reference to vertices of current face (tria)
+                    fvn = [None, None, None]  # reference to vertex normals of current face (tria)
+                    for i in range(3):
+                        f[i] = f[i].split('/')
+                        fv[i] = int(f[i][0])  ######### TBD: ERROR CHECKING
+                        fvn[i] = int(f[i][2])  ######### TBD: ERROR CHECKING
+                    for i in range(3):
+                        t.append(vertices[fv[i]])
+                        if fv[i] < fv[(i+1) % 3]:
+                            edge_sorted = (fv[i], fv[(i+1)%3])
                         else:
-                            edge_sorted = (f[(i + 1) % 3], f[i])
+                            edge_sorted = (fv[(i + 1) % 3], fv[i])
                         if edge_sorted in outer_edges:
                             outer_edges.pop(edge_sorted)  # if the same edge appears twice it is inside
                         else:
                             outer_edges[edge_sorted] = True  # edge read the first time
+                    for i in range(3):
+                        vnx, vny, vnz = normals[fvn[i]][0], normals[fvn[i]][1], normals[fvn[i]][2]
+                        ln = sqrt(vnx*vnx + vny*vny + vnz*vnz)  # length of vertex normal
+                        t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
                     trias.append(t)
         patchID = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!!        for tria in trias:
         self.log.info("Following trias have been read from file:")
@@ -611,7 +642,7 @@ class muxpArea:
             self.log.info(tria)
             new_v = [None, None, None]
             for e in range(3):
-                new_v[e] = [tria[e][0], tria[e][1], tria[e][2], 0, 0] #This version only creates simple vertices without s/t coordinates
+                new_v[e] = [tria[e][0], tria[e][1], tria[e][2], tria[e][3], tria[e][4]] #This version only creates simple vertices without s/t coordinates
             self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
             #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
         self.log.info("Following outer edges identified: {}".format(outer_edges))
