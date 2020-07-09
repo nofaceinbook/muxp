@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.0 exp
+# muxp_file.py    Version: 0.2.2 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -18,10 +18,6 @@
 #   <http://www.gnu.org/licenses/>. 
 #
 #******************************************************************************
-
-#New in 0.2.0: Corrected that NEW Sceneries will be identified by findDSFfiles
-#New in 0.2.0: update_elevation_in_poly command
-#New in 0.2.0: findDSFmeshFiles function now searches for all scenery packs independent from tile (set None)
 
 from logging import getLogger
 from os import path, replace, walk, stat

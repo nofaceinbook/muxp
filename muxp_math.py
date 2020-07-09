@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.1.8 exp
+# muxp_math.py   Version: 0.2.2 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -87,22 +87,23 @@ def sortPointsAlongPoly(points, poly, epsilon=0.001):
     epsilon is the minimal error distances allowed in decision if point is on edge.
     """
     sortedPoints = []  # list of points sorted along Poly
+    log_info = ""
     for p in points:
         for i in range(len(poly) - 1):
             edist, odist, dist = edgeDistance(p, poly[i], poly[i+1])
-            print("Check point {} for edge {} results in odist {} and distance {}".format(p, i, odist, edist))
+            #print("Check point {} for edge {} results in odist {} and distance {}".format(p, i, odist, edist))
             if odist < epsilon and edist >= -epsilon and edist <= 1 + epsilon:
                 print("    added to list")
                 sortedPoints.append([i, edist, p[0], p[1]])
                 break
             if i == len(poly) - 2:  # we did not find an edge for p
-                #print("ERROR: point {} not on edge of poly {}".format(p, poly))
+                log_info += "ERROR: point {} not on edge of poly {}\n".format(p, poly)
                 return None
     sortedPoints.sort()  # okay now they are sorted as required
     for i in range(len(sortedPoints)):
-        print("Point {} on edge no {} starting at {} with part {}".format(sortedPoints[i][2:], sortedPoints[i][0], poly[sortedPoints[i][0]], sortedPoints[i][1]))
+        log_info += "Info: Point {} on edge no {} starting at {} with part {}\n".format(sortedPoints[i][2:], sortedPoints[i][0], poly[sortedPoints[i][0]], sortedPoints[i][1])
         sortedPoints[i] = [sortedPoints[i][2], sortedPoints[i][3]]  # remove now data used for sorting
-    return sortedPoints
+    return sortedPoints, log_info
 
 def PointLocationInTria(p, t): #delivers location of point p in Tria t by vectors spanned by t from last vertex in tria
     denom = ((t[1][1] - t[2][1])*(t[0][0] - t[2][0]) + (t[2][0] - t[1][0])*(t[0][1] - t[2][1]))
@@ -488,16 +489,16 @@ def GetMinEar(poly): ### NEW NEW: Try to cut first ears with minimal length to a
         p2 = poly[i % size]
         p3 = poly[(i+1) % size]
         if IsConvex(p1, p2, p3):
-            #if max_tria_angle([p1, p2, p3]) < 177: #New 2 --> avoid trias being just a line 
-                for x in poly:
-                    if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
-                        tritest = True
-                if tritest == False:
-                    if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist: #New
-                        mindist = distance(poly[(i-1) % size], poly[(i+1) % size]) #New
-                        fallback = i #New3
-                        if max_tria_angle([p1, p2, p3]) < 177: #New 3
-                            minindex = i #New3
+            for x in poly:
+                if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
+                    tritest = True
+            if not tritest:
+                if max_tria_angle([p1, p2, p3]) < 177:  # avoid trias being just a line
+                    if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist:
+                        mindist = distance(poly[(i-1) % size], poly[(i+1) % size])
+                        minindex = i
+                else:  # we have (nearly) a line tria, but a tria
+                    fallback = i
                         
     if minindex == None: #New
         if fallback != None: #New3

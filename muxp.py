@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.1 exp"
+muxp_VERSION = "0.2.2 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -645,6 +645,10 @@ class muxpGUI:
         if muxp_process_error:
             if muxp_process_error == 99:  # special command for exiting without update
                 showRunResult("Muxp file includes exit command.", "No update saved!", False)
+            elif muxp_process_error == -10:
+                showRunResult(".obj file for insertion not found", "Mesh not inserted!", True)
+            elif muxp_process_error == -11:
+                showRunResult("Error loading .obj file!", "Mesh not inserted (refer log for details)", True)
             else:
                 showRunResult("Error {} while updating mesh".format(muxp_process_error), "No update saved!", True)
             return muxp_process_error #No writing of dsf file in case of error
@@ -656,7 +660,7 @@ class muxpGUI:
             #### OPTION: write hex-presentation instead binary string to dsf with binascii.b2a_hex ###
             #currentDSFisUNMUXED = True
         update_number = 0 
-        for props in self.dsf.Properties: #check for alread included updates in dsf and find highest number
+        for props in self.dsf.Properties:  # check for already included updates in dsf and find highest number
             if props.startswith("muxp/update/"):
                 update_number_read = int(props[12:])
                 if update_number_read > update_number:
@@ -756,25 +760,39 @@ class muxpGUI:
 
             if c["command"] == "extract_mesh_to_file":
                 head, tail = path.split(update["filename"])
-                obj_filename = path.join(head, c["name"])
+                if c["name"] == "":
+                    obj_filename = path.join(head, "muxp_mesh.obj")
+                    log.info("extract mesh command has no name attribute; using default name: {}".format(obj_filename))
+                else:
+                    obj_filename = path.join(head, c["name"])
                 log.info("Extract mesh in polygon: {} to file {}".format(c["coordinates"], obj_filename))
-                a.extractMeshToObjFile(c["coordinates"], obj_filename)
+                file_info = "# X-Plane Mesh Extract by MUXP (version: {})\n".format(muxp_VERSION)
+                file_info += "# from scenery pack: {}\n".format(self.dsf_sceneryPack)
+                file_info += "# dsf file hash: {}\n".format(self.dsf.FileHash)
+                a.extractMeshToObjFile(c["coordinates"], obj_filename, file_info)
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
 
             if c["command"] == "insert_mesh_from_file":
                 head, tail = path.split(update["filename"])
-                obj_filename = path.join(head, c["name"])
+                if c["name"] == "":
+                    obj_filename = path.join(head, "muxp_mesh.obj")
+                    log.info("insert mesh command has no name attribute; using default name: {}".format(obj_filename))
+                else:
+                    obj_filename = path.join(head, c["name"])
+                if not path.isfile(obj_filename):  # Error that insertion file not existent
+                    return -10
                 borderlandpoly = a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
+                if len(borderlandpoly) == 0:  # Error occurred when inserting
+                    return -11
                 elevation_scale = 0.05  # allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
-                ########## OPEN: HOW TO LEAVE existing vertices with -32768 ???  --> should work
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"], borderlandpoly], a.atrias, kml_filename + "_{}".format(c_index + 1))
             
             if c["command"] == "update_network_levels":
                 ###### tbd: put details below to separate file like mux.area.py #################
                 ###### tbd: support creation of road segments incl. insertion of addtional vertices #################
-                log.info("Updating network elevation in polygon: {}".format( c["coordinates"]))
+                log.info("Updating network elevation in polygon: {}".format(c["coordinates"]))
                 for chain in self.dsf.getChains():
                     points_in_chain = []
                     for v in chain:

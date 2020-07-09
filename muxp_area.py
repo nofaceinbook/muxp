@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.1.6 exp
+# muxp_area.py    Version: 0.2.2 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -22,17 +22,11 @@
 #
 #******************************************************************************
 
-#Changes from version 0.1.3: Updated CutPoly for inner trias (no deepcopy and remove when inner trias are not kept)
-#Changes from version 0.1.4: Updated CutPoly to handle also polygons that are completely inside one tria
-#                            Using new IsClockwise (instead is_clockwise) and earclipTrias (instead earclip) both now in muxp_math.py
-#                            Updated CreatPolyTerrain to have a method how triangulation is performed. Appart from earclip special method for segment_intervals introduced
-# Changes from version 0.1.5: CreatePolyTerrain sets now for newly generated vertices None for the original trias they are in (instead of -1). The None case is then treated in CreateDSFvertices.
-#                             Removed use of tripy (triangulation now in muxp_math)
-
 from xplnedsf2 import *
 from logging import getLogger
 from muxp_math import *
 from copy import deepcopy
+
     
 class muxpArea:
     
@@ -425,6 +419,16 @@ class muxpArea:
         self.log.info("   ... {} trias of area found that belong to mesh triangles intersecting or within boundary.".format(len(s)))
         return s
 
+    def ensureClockwiseTria(self, tria):
+        """
+        Checks if vertices of tria (in form of self.atria) is clockwise.
+        If not order is changed to be clockwise
+        """
+        if not IsClockwise([tria[0][:2], tria[1][:2], tria[2][:2]]):
+            self.log.info("Changing following tria to clockwise order: {}".format(tria))
+            tria = [tria[2], tria[1], tria[0], tria[5], tria[4], tria[3], tria[6]]
+        return tria
+
     def edges(self, poly=None):
         """
         Returns dictonary of all edges in area, where the key are endpoints (p, q) round to 7 digits
@@ -512,7 +516,7 @@ class muxpArea:
             self.limitEdges(poly, limit) #shorten again
         ########## This funciton might be improved to go only through edges in new_trias instead starting from scratch in recursions
 
-    def extractMeshToObjFile(self, poly, filename, scal=100000):
+    def extractMeshToObjFile(self, poly, filename, file_info="# MUXP Mesh extract"):
         """
         Extracts all pyhsical trias of area which are in poly to an Wavefront .obj File with filename.
         Existing files will be overwritten!
@@ -536,11 +540,19 @@ class muxpArea:
                             normals[vn] = len(normals)
         center = CenterInAtrias(extract_atrias)
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
-            f.write("# muxp mesh extract with center: {} {} {}\n".format(center[0], center[1], center[2]))
-            #f.write("# muxp lat-lon-scale: {}\n".format(scal))
-            center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercartor projection
+            f.write(file_info)
+            f.write("o CENTER_Coordinates\n")
+            f.write("# coordinates relative to center: {} {} {}\n".format(center[0], center[1], center[2]))
+            center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercator projection
             center[2] = round(center[2])  # center elevation also full meter
-            f.write("# using Mercartor projection with center: {} {} {}\n".format(center[0], center[1], center[2]))
+            f.write("# used in Mercator projection: {} {} {}\n".format(center[0], center[1], center[2]))
+            for i in range(3):
+                f.write("v {} ".format((int(center[i] / 1000000)) / 1000))
+                f.write("{}".format(int((center[i] - (int(center[i] / 1000000) * 1000000)) / 1000) / 1000))
+                f.write(" {}\n".format((center[i] - (int(center[i] / 1000)) * 1000) / 1000))
+            f.write("vn 0 0 1\n")
+            f.write("f 1//1 2//2 3//1\n")
+            f.write("o MESH\n")
             for vc in vertices:
                 f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3), round(lat2y(vc[1]) - center[1], 3),
                                               vertices[vc][0] - center[2]))
@@ -549,8 +561,8 @@ class muxpArea:
             for t in extract_atrias:
                 f.write("f")
                 for v in range(3):
-                    f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 1, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 1))
-                    # +1 as in .obj indices start with 1 instead 0
+                    f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 4, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 2))
+                    # +4 / +2 as in .obj indices start with 1 instead 0 and for center 3 vertices and 1 normal added
                 f.write("\n")
 
 
@@ -566,7 +578,8 @@ class muxpArea:
         self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
         polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # False for not keeping inner trias\
         # None for elevation as only new terrain should get elevation
-        borderv = sortPointsAlongPoly(borderv, poly)
+        borderv, log_info = sortPointsAlongPoly(borderv, poly)
+        self.log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
         borderv = borderv[borderv.index(min(borderv)):] + borderv[:borderv.index(min(borderv))]
         #  borderv start now with the most south-west corner
         borderv.append(borderv[0])  # make it a closed poly
@@ -574,53 +587,70 @@ class muxpArea:
             borderv.reverse()  # outer polygon for later triangulation should be clockwise
         for v in borderv:
             self.log.info("Border Vertex after Cut: {}".format(v))
-        center = [0, 0, 0]  # in case file has no info on center
-        scale = 1  # in case file has no info on scale
-        vertices = [[None]] #list of vertices to be read; first dummy element to match index starting with 1
-        normals = [[None]] #list of vertex normals to be read; first dummy element to match index starting with 1
+        center = []  # coordinates for center-offset
+        vertices = [[None]]  # list of vertices to be read; first dummy element to match index starting with 1
+        normals = [[None]]  # list of vertex normals to be read; first dummy element to match index starting with 1
         trias = []
-        outer_edges = dict()  # dict with (v1_index, v2_index) as keya; at the end keys are all edges of poly outside
+        outer_edges = dict()  # dict with (v1_index, v2_index) as key; at the end keys are all edges of poly outside
         with open(filename, encoding="utf8", errors="ignore") as f:
+            # Checking if file exists was done in muxp.py before calling this function!
+            current_object = ""  # keeps track for which object type information is read
             for line in f:
-                if line.find("# muxp mesh extract with center:") >= 0:
-                    center_info = line[line.find(":") + 1:]
-                    center = center_info.split()
-                    for i in range(len(center)):
-                        center[i] = float(center[i])  ######### TBD: ERROR CHECKING
-                    self.log.info("Coordinates read will be relative to center: {}".format(center))
-                    center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # change to Mercartor projection
-                    center[2] = round(center[2])
-                    self.log.info("  Center in Mercartor projection: {}".format(center))
-                #elif line.find("# muxp lat-lon-scale:") >= 0:
-                #    scale = float(line[line.find(":") + 1:])
-                #    self.log.info("Scale for lat/lon coordinates used is: {}".format(scale))
-                elif line.find("v ") == 0:  # vertex definition in .obj file
+                if line.find("o ") == 0:
+                    if line.find("CENTER_Coordinates") > 0:
+                        current_object = "CENTER"
+                    elif line.find("MESH") > 0:
+                        current_object = "MESH"
+                elif line.find("v ") == 0 and current_object == "CENTER":  # center vertex definition in .obj file
                     v = line.split()
                     v.pop(0)  # remove first element 'v' from list
-                    v[0], v[1] = x2lon(float(v[0]) + center[0]), y2lat(float(v[1]) + center[1])  # change from Mercartor projection
-                    v[2] = float(v[2]) + center[2]       ######### TBD: ERROR CHECKING when converting from float !!!!
-                    #for i in range(len(v)):
-                    #    if i < 2:
-                    #        v[i] = float(v[i]) / scale + center[i]
-                    #    else:
-                    #        v[i] = float(v[i]) + center[i]   ######### TBD: ERROR CHECKING
+                    try:
+                        v = [float(v[0]), float(v[1]), float(v[2])]
+                    except (ValueError, IndexError):
+                        self.log.info("Line in .obj file defining v does not contain three floats but {}".format(v))
+                        return []
+                    center.append(v[0] * 10**9 + v[1] * 10**6 + v[2] * 1000)
+                    vertices.append(v)  # append also if not needed for mesh, but relevant for indexing in faces
+                elif line.find("v ") == 0 and current_object == "MESH":  # mesh vertex definition in .obj file
+                    v = line.split()
+                    v.pop(0)  # remove first element 'v' from list
+                    try:
+                        v = [float(v[0]), float(v[1]), float(v[2])]
+                    except (ValueError, IndexError):
+                        self.log.info("Line in .obj file defining v does not contain three floats but {}".format(v))
+                        return []
                     vertices.append(v)
                 elif line.find("vn ") == 0:  # vertex normal definition in .obj file
                     vn = line.split()
                     vn.pop(0)  # remove 'vn' from list
-                    normals.append([float(vn[0]), float(vn[1]), float(vn[2])])
+                    try:
+                        vn = [float(vn[0]), float(vn[1]), float(vn[2])]
+                    except (ValueError, IndexError):
+                        self.log.error("Line in .obj file defining vn does not contain three floats but {}".format(vn))
+                        return []
+                    normals.append(vn)
                     self.log.info("Vertex normal read: {}".format(normals[-1]))  #### JUST FOR TESTING, TO BE REMOVED !!! #####
-                elif line.find("f ") == 0:  # face definition in .obj file
+                elif line.find("f ") == 0 and current_object == "MESH":  # face definition in .obj file, only for mesh
                     # IMPORTANT: THIS VERSION ASSUMES FACES AS V//VN and trias only!
-                    f = line.split()  ########## TBD: error checking that 3 values are returned
+                    f = line.split()
                     f.pop(0)  # remove first element 'f' from list
+                    if len(f) != 3:
+                        self.log.error("Line in .obj file defining f defines no triangle but {}".format(f))
+                        return []
                     t = []  # new tria to be defined
                     fv = [None, None, None]  # reference to vertices of current face (tria)
                     fvn = [None, None, None]  # reference to vertex normals of current face (tria)
                     for i in range(3):
                         f[i] = f[i].split('/')
-                        fv[i] = int(f[i][0])  ######### TBD: ERROR CHECKING
-                        fvn[i] = int(f[i][2])  ######### TBD: ERROR CHECKING
+                        if len(f[i]) != 3:
+                            self.log.error("Line in .obj file defining f defines vertex not having 3 values but {}".format(f))
+                            return []
+                        try:
+                            fv[i] = int(f[i][0])
+                            fvn[i] = int(f[i][2])
+                        except ValueError:
+                            self.log.error("Line in .obj file defining f does not have correct integers but {}".format(f))
+                            return []
                     for i in range(3):
                         t.append(vertices[fv[i]])
                         if fv[i] < fv[(i+1) % 3]:
@@ -636,15 +666,30 @@ class muxpArea:
                         ln = sqrt(vnx*vnx + vny*vny + vnz*vnz)  # length of vertex normal
                         t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
                     trias.append(t)
-        patchID = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!!        for tria in trias:
+        self.log.info("Mesh .obj file read with center-offset (Mercator): {}".format(center))
+        if len(center) < 3:
+            self.log.error("Read .obj file has no object CENTER for coordinate offset. Mesh not inserted!")
+            return []
+        if len(vertices) < 6:
+            self.log.error("Read .obj file has no triangle defined or object MESH missing. Mesh not inserted!")
+            return []
+        for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
+            #self.log.info("Converting Vertex {} to Mercator.".format(vertices[i]))
+            if len(vertices[i]) >= 3:
+                vertices[i] = [x2lon(vertices[i][0] + center[0]), y2lat(vertices[i][1] + center[1]), vertices[i][2] + center[2]]
+        patchID = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!
         self.log.info("Following trias have been read from file:")
         for tria in trias:
-            self.log.info(tria)
+            #self.log.info("Tria in Mercator offset: {}".format(tria))  ##### TESTING ONLY #######
             new_v = [None, None, None]
             for e in range(3):
-                new_v[e] = [tria[e][0], tria[e][1], tria[e][2], tria[e][3], tria[e][4]] #This version only creates simple vertices without s/t coordinates
+                # For the vertex also center-offset is added and converted back from Mercator to degress
+                new_v[e] = [x2lon(tria[e][0] + center[0]), y2lat(tria[e][1] + center[1]), tria[e][2] + center[2], tria[e][3], tria[e][4]]
+                # This version only creates simple vertices without s/t coordinates
             self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
-            #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
+            # As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
+            self.atrias[-1] = self.ensureClockwiseTria(self.atrias[-1])
+            self.log.info(self.atrias[-1])
         self.log.info("Following outer edges identified: {}".format(outer_edges))
         v = next(iter(outer_edges))
         oe_poly = [v[0]]  # list with indices to vertices that build the poly along outer edges
@@ -663,8 +708,13 @@ class muxpArea:
                     next_v_found = True
                     break
             if not next_v_found:
-                self.log.error("Mesh to be inserted is not continuous. Following part missing in insertion {}!".format(outer_edges))
-                #return -1   #### TBD: Two types of errors to distinghuish. Coming back to first vertex or not
+                self.log.warning("Mesh to be inserted is not continuous. Following part missing in insertion {}!".format(outer_edges))
+                if next_v == oe_poly[0]:
+                    self.log.warning("However even mesh is not continuous, found closed poly for outer edges and continue with insertion.")
+                    break
+                else:
+                    self.log.error("Found no closed polygon for outer edges. Can't insert this mesh from file!")
+                    return[]
         self.log.info("Outer Edges as Poly: {}".format(oe_poly))
         for i in range(len(oe_poly)):
             oe_poly[i] = vertices[oe_poly[i]]
@@ -675,7 +725,9 @@ class muxpArea:
             oe_poly.reverse()  # inner poly for triangulation should be anti-clockwise
         self.log.info("Outer Edges as Poly: {}".format(oe_poly))
         borderland = borderv + oe_poly   # area between inner/outer poly to be triangulated, not closed for earclip
+        self.log.info("Borderland to be earclipped: {}".format(borderland))
         trias = earclipTrias(borderland)
+        self.log.info("Earclipp returned {} trias for {} vertices.".format(len(trias), len(borderland)))
         for tria in trias:
             new_v = [None, None, None]
             for e in range(3):
@@ -693,6 +745,7 @@ class muxpArea:
                 new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
                 # This version only creates simple vertices without vertex normals and without s/t coordinates
             self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
+            self.log.info("Borderland Tria added: {}".format(self.atrias[-1]))
             # As tria is completely new, there is no pool/patchID where tria is inside, so None
         return borderland
 
