@@ -209,9 +209,10 @@ def CenterInAtrias(atrias):
                     max_coords[j] = t[i][j]
     return [(min_coords[0]+max_coords[0])/2, (min_coords[1]+max_coords[1])/2, (min_coords[2]+max_coords[2])/2]
 
-def segmentToBox (p1, p2, w):
+def segmentToBox(p1, p2, w):
     """
-    Returns for a segement between points p1 and p2 (with [x,y] coordinates)
+    Returns for a segement between points p1 and p2 (with [y,x] coordinates)
+    ---> IMPORTANT: matches the not swapped 3d coordinates
     boundary of a box with length of segement where line is in the middle
     and the box has width w
     """
@@ -224,12 +225,13 @@ def segmentToBox (p1, p2, w):
     elif round (p1[0], 6) == round (p2[0], 6): #segment is exactly north-south direction
         dx = w/2
         dy = 0
-    else: 
-        m = -1 / ((p2[0] - p1[0]) / (p2[1] - p1[1])) #gradient of perpendicular line
-        dx = sqrt( ( (w/2)**2) / (1 + m**2)) 
-        dy = dx * m 
+    else:
+        m = -1 / ((lat2y(p2[0]) - lat2y(p1[0])) / (lon2x(p2[1]) - lon2x(p1[1])))  # gradient of perpendicular line
+        # NEW 04.08.2020 Above gradient is calculated in Mercartor projection to have equal of angle
+        dx = sqrt( ( (w/2)**2) / (1 + m**2))
+        dy = dx * m
     dx /= degree_dist_at_lat #convert meters in longitute coordinate difference at geographical latitude
-    dy /= lat_degree_dist_average #convert meters in latitude coordinate difference 
+    dy /= lat_degree_dist_average #convert meters in latitude coordinate difference
     l = []
     if (p1[1] <= p2[1] and dy >= 0) or (p1[1] > p2[1] and dy < 0): #make sure to always insert in clockwise order
         l.append([round(p1[1] - dx, 8), round(p1[0] - dy, 8)]) #buttom corner1
@@ -243,7 +245,6 @@ def segmentToBox (p1, p2, w):
         l.append([round(p2[1] + dx, 8), round(p2[0] + dy, 8)])
     l.append(l[0]) #add first corner to form closed loop
     return l
-
 
 def gauss_jordan(m, eps = 1.0/(10**10)):
     """Puts given matrix (2D array) into the Reduced Row Echelon Form.
@@ -354,7 +355,7 @@ def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline 
     end = (rwy[1][1], rwy[1][0]) #end coordinates rwy
     startD = (start[0] - 0.1 * (end[0] - start[0]), start[1] - 0.1 * (end[1] - start[1])) #use starting point 10% of rwy length before to really get value for all points around runway
     endD = (start[0] + 1.1 * (end[0] - start[0]), start[1] + 1.1 * (end[1] - start[1]))   #use end point 10% of rwy length behind to really get value for all points around runway
-    inclination_of_ortho = (end[1] - start[1], start[0] - end[0])
+    inclination_of_ortho = (lat2y(end[1]) - lat2y(start[1]), lon2x(start[0]) - lon2x(end[0]))  # NEW 04.08.2020 done in Mercartor Projection to keep equal of angle
     orthoStartD = (p[0] - inclination_of_ortho[0], p[1] - inclination_of_ortho[1]) # Start of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
     orthoEndD = (p[0] + inclination_of_ortho[0], p[1] + inclination_of_ortho[1]) # End of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
     p_centered = intersection(startD, endD, orthoStartD, orthoEndD) #location of p on center line

@@ -291,7 +291,7 @@ def kml2muxp(filename):
                     muxp_lines.append("    - {} {}".format(v[1], v[0]))
             if context == "Subfolder":
                 if line.find('<name>') >= 0 and line.find('3d_coordinates:') >= 0:
-                    muxp.append("    {}".format(line[line.find('<name>') + 6:line.find('</name>')]))
+                    muxp_lines.append("    {}".format(line[line.find('<name>') + 6:line.find('</name>')]))
                     context = "3d_coordinates"
                     continue  #### assume name for folder is in separat line, no conflict with name of 3d elevation points below
                 if line.find("</Folder>") >= 0:

@@ -148,7 +148,7 @@ def validate_muxp(d, logname):
     if muxp_version > SUPPORTED_MUXP_FILE_VERSION:
         err = "muxp file version is {} but version {} is supported".format( d["muxp_version"], SUPPORTED_MUXP_FILE_VERSION)
         log.warning(err)
-        return 1, err
+        # return 1, err  ### NEW 29.07.2020: Don't return but continue after waring
     ### Extract and validate tile defined
     try:
         longitude = int(d["tile"][:3])

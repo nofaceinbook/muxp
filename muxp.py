@@ -724,6 +724,7 @@ class muxpGUI:
         #self.current_action = "read"
         #self.dsf.read(filename)
         a = muxpArea(self.dsf, LogName)
+        log.info("Area to be extracted: {}".format(update["area"]))
         a.extractMeshArea(*update["area"])
         elevation_scale = 1 ### IMPORTANT: When command set sub-meter vertices this scale has to be adapted
         
@@ -866,7 +867,8 @@ class muxpGUI:
                     
             if c["command"] == "cut_spline_segment":
                 log.info("Cutting segment as spline for the following elevation profile: {} m".format(c["3d_coordinates"]))
-                segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"]) #box around first and last vertex with width
+                segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"])  # box around first and last vertex with width
+                log.info("Box around runway is: {}".format(segment_bound))
                 segment_interval_bound = [] #bound including also vertices for interval steps
                 for corner1, corner2 in [[1,2], [3,0]]:
                     interval_steps = int(distance(segment_bound[corner1], segment_bound[corner2]) /  c["profile_interval"]) + 1
@@ -893,7 +895,7 @@ class muxpGUI:
                 for vertex in a.getAllVerticesForCoords(segment_interval_bound): #set vertices of intervals to correct elevation
                     elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
                     log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
-                    vertex[2] = elev                
+                    vertex[2] = elev
                 for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
                     elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)   #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
                     vertex[2] = elev
