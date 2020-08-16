@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.2 exp
+# muxp_file.py    Version: 0.2.3 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
