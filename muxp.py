@@ -750,12 +750,32 @@ class muxpGUI:
             log.info("PROCESSING COMMAND: {}".format(c))
             
             if c["command"] == "update_elevation_in_poly":
-                log.info("Updating elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
-                for t in a.atrias: #go through all trias in area
-                    for i, p in enumerate(t[0:3]): #all their points
-                        if PointInPoly(p[0:2], c["coordinates"]):
-                            t[i][2] = c["elevation"]
-                            log.info("For coords: {} set elevation to: {}".format(t[i][0:2], t[i][2]))
+                if c["elevation"] is not None:
+                    ##### currently elevation_scale not adapted here, so if not changed by other commands will be full meter here #####
+                    log.info("Updating elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
+                    for t in a.atrias: #go through all trias in area
+                        for i, p in enumerate(t[0:3]): #all their points
+                            if PointInPoly(p[0:2], c["coordinates"]):
+                                log.info("For tria memory id {}: with coords: {} set elevation from: {}  to: {}".format(hex(id(t[i])), t[i][0:2], t[i][2],  c["elevation"]))
+                                t[i][2] = c["elevation"]
+                elif "3d_coordinates" in c:
+                    ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
+                    ramp_tria[0][0], ramp_tria[0][1] = ramp_tria[0][1], ramp_tria[0][0]  # 3d coords currently
+                    ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
+                    ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
+                    log.info("Following Tria is used for setting elevation: {}".format(ramp_tria))
+                    for nt, t in enumerate(a.atrias):
+                        for v in range(3):
+                            if PointInPoly(t[v][0:2], c["coordinates"]):  # adapt all vertices inside polygon
+                                l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
+                                t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (
+                                            ramp_tria[1][2] - ramp_tria[2][2])
+                                log.info(
+                                    "Vertex no. {} of tria no. {} at {} set to elevation {} with l0={} and l1={}".format(
+                                        v, nt, t[v][:2], t[v][2], l0, l1))
+                    elevation_scale = 0.05  # allows 5cm elevation steps  #### TBD: Make this value configurable in command
+                else:
+                    log.warning("Command {} does neither have value to set elevation nor 3d_coordinates for elevation by triangle. So nothing changed".format(c["command"]))
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index+1))
 
@@ -834,12 +854,12 @@ class muxpGUI:
                 ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
                 ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
                 log.info("Following Tria is used for ramp elevation: {}".format(ramp_tria))
-                for t in a.atrias:
+                for nt, t in enumerate(a.atrias):
                     for v in range(3):
                         if t[v][2] == elev_placeholder:  # adapt all marked vertices with elev. from position on ramp
                             l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
                             t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
-                            log.info("Vertex at {} set to ramp-elevation {} with l0={} and l1={}".format(t[v][:2], t[v][2], l0, l1))
+                            log.info("Vertex no. {} of tria no. {} at {} set to ramp-elevation {} with l0={} and l1={}".format(v, nt, t[v][:2], t[v][2], l0, l1))
                 elevation_scale = 0.05  # allows 5cm elevation steps  #### TBD: Make this value configurable in command
                 shown_polys = polysouter
                 for pol in shown_polys:
@@ -851,13 +871,18 @@ class muxpGUI:
             if c["command"] == "cut_flat_terrain_in_mesh":
                 polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
                 ########### TBD: CutPoly should not change elevation, so it would not needed to give parameter None !!! ############
+                borderv, log_info = sortPointsAlongPoly(borderv, c["coordinates"]) # NEW 16.08.20
+                log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
+                borderv.append(borderv[0])  # make it a closed poly
+                for v in borderv:
+                    log.info("Border Vertex after Cut: {}".format(v))
+                a.createPolyTerrain(borderv, c["terrain"], c["elevation"])  # NEW 16.08. was c["coordinates"] instead borderv
+                ### NEW 16.08.20 Following 2 lines not used, as mesh should already be split by cut above
+                #for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
+                #    a.splitCloseEdges(vertex)
+                ### NOTE: even if only elevation for terrain is set, the new changed trias will create different looking terrain also outside terrain mesh
                 for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
                     vertex[2] = c["elevation"]
-                ### NOTE: even if only elevation for terrain is set, the new changed trias will create different looking terrain also outside terrain mesh
-                a.createPolyTerrain(c["coordinates"], c["terrain"], c["elevation"])
-                for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
-                    ########### TBD: borderv are not sorted along poly --> SORT THEM FIRST USING NEW FUNCTION FOR INSERTING MESH .obj FILE !!!!!!!!!
-                    a.splitCloseEdges(vertex)
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
@@ -970,11 +995,13 @@ class muxpGUI:
             if c["command"] == "exit_without_update":
                 return 99
 
-        log.info("DSF vertices created with scaling: {}".format(elevation_scale))
+        log.info("DSF vertices will be created with scaling: {}".format(elevation_scale))
         self.muxp_status_label.config(text = "Creating new vertices and\n   insert mesh update in dsf file")  
         self.window.update()
+        a.validate_mesh()
         a.createDSFVertices(elevation_scale)
         a.insertMeshArea()
+
 
 
 ########### MAIN #############

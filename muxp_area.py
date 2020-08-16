@@ -61,8 +61,9 @@ class muxpArea:
                     if not (minx > lonE and maxx > lonE): #x-range of box is not completele East of area
                         if not (miny < latS and maxy < latS): #y-range is not completele South of area
                             if not (miny > latN and maxy > latN): #y-range is not conmpletele North of ares
-                                self.atrias.append([ self.dsf.V[t[0][0]][t[0][1]], self.dsf.V[t[1][0]][t[1][1]], self.dsf.V[t[2][0]][t[2][1]] ])
-                                self.atrias[-1].extend(t)  #so we have an intersection of tria box with area and append the tria
+                                ### NEW 15.08.20: DEEPCOPY 2 LINES BELOW TO HAVE REALLY UNIQUE VERTICES NOT RELATING TO SAME IN DSF !!!
+                                self.atrias.append([deepcopy(self.dsf.V[t[0][0]][t[0][1]]), deepcopy(self.dsf.V[t[1][0]][t[1][1]]), deepcopy(self.dsf.V[t[2][0]][t[2][1]])])
+                                self.atrias[-1].extend(deepcopy(t))  #so we have an intersection of tria box with area and append the tria
                                 self.atrias[-1].append(self.dsf.Patches.index(p))
                                 self.apatches.add(self.dsf.Patches.index(p))
                                 tremoved.append(t)
@@ -93,6 +94,18 @@ class muxpArea:
             dsftrias.extend(patchTrias[p])
             self.dsf.Patches[p].trias2cmds(dsftrias)
 
+    def validate_mesh(self):
+        """
+        Function validates if mesh of area is correct like trias are clockwise, are no lines or just points,
+        no vertex on same coordinates with different elevation ....
+        """
+        for nt, t in enumerate(self.atrias):
+            if not IsClockwise([t[0][:2], t[1][:2], t[2][:2]]):
+                self.log.warning("Tria {} is anticlockwise and will be set to clockwise now.".format(t))
+                self.atrias[nt][0], self.atrias[nt][2] = self.atrias[nt][2],  self.atrias[nt][0]
+                #### tbd to change tria
+        ##### to be continued ##############
+        ###### OPEN: Check not atrias but really trias in dsf are correct? But then this has to be final step after creating dsfVertices and insertion in dsf ##########
 
     def getAllVerticesForCoords(self, coords):
         """
@@ -105,7 +118,7 @@ class muxpArea:
             cdict[(round(c[0], 7), round(c[1], 7))] = True  # coords round to range of cm
         for t in self.atrias:
             for v in t[:3]:
-                self.log.info("Checking vertex: ({}, {})".format(round(v[0],7), round(v[1],7)))
+                self.log.debug("Checking vertex: ({}, {})".format(round(v[0],7), round(v[1],7)))
                 if (round(v[0], 7), round(v[1], 7)) in cdict:
                     vertices.append(v)  # add tuple of vertex at coords to make sure to get all vertices at the coords
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
@@ -825,8 +838,13 @@ class muxpArea:
                             self.log.error("DSF File already has maximum number of point pools. Addtional pools required for change can not be added!!!")
                             return -1
                         self.dsf.V.append([v])
+                        self.log.info("New Pool required to insert vertex: {}".format(v))
                         if t[vt+3][0] == None: #completele new tria in completely new patch, so no scaling available
-                            self.dsf.Scalings.append([deepcopy(self.dsf.Scalings[-1][0]), deepcopy(self.dsf.Scalings[-1][1]),deepcopy(self.dsf.Scalings[-1][2]),deepcopy(self.dsf.Scalings[-1][3]),deepcopy(self.dsf.Scalings[-1][4])]) ############## This is a dirty soltion --- TBD ###############
+                            scal_id = len(self.dsf.Scalings) - 1  # New 13.8.20: We need to find scaling with at minimum 5 values
+                            while len(self.dsf.Scalings[scal_id]) < 5 and scal_id >= 0:
+                                self.log.info("Scaling id {} has not enough coordinates, check for next ...".format(scal_id))
+                                scal_id -= 1
+                            self.dsf.Scalings.append([deepcopy(self.dsf.Scalings[scal_id][0]), deepcopy(self.dsf.Scalings[scal_id][1]),deepcopy(self.dsf.Scalings[scal_id][2]),deepcopy(self.dsf.Scalings[scal_id][3]),deepcopy(self.dsf.Scalings[scal_id][4])]) ############## This is a dirty soltion --- TBD ###############
                             ############################### BAD IMPLEMENTATION ABOVE #### Actually new scaling has to be defined based on area and typical s/t coordinates for that tile ##########################
                         else:
                             self.dsf.Scalings.append(deepcopy(self.dsf.Scalings[t[vt+3][0]])) #get scalings from the original tria vertex the new vertex is inside

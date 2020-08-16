@@ -95,7 +95,7 @@ def validate_muxp(d, logname):
                                "limit_edges" : ["coordinates", "edge_limit"],
                                "update_raster_elevation" : ["coordinates", "elevation"],
                                "update_raster4spline_segment" : ["3d_coordinates", "width"],
-                               "update_elevation_in_poly": ["coordinates", "elevation"],
+                               "update_elevation_in_poly": ["coordinates"],  # optionally either set flat by elevation or ramp by 3 3d_cooridinates
                                "extract_mesh_to_file": ["coordinates"],
                                "insert_mesh_from_file": ["coordinates", "terrain"],
                                "exit_without_update": []}
@@ -179,7 +179,7 @@ def validate_muxp(d, logname):
         log.error(err)
         return -4, err
     if not (0 <= d["area"][1] - d["area"][0] <= 1) or not (0 <= d["area"][3] - d["area"][2] <= 1):
-        err = "Area definiton not correct. Must be of form longitude_min, longitude_max, latitude_min, latidude_max and within 1x1 degree grid."
+        err = "Area definiton not correct. Must be of form latitude_min, latidude_max, longitude_min, longitude_max and within 1x1 degree grid."
         log.error(err)
         return -4, err
     ### VALIDATE AND EXTRACT COMMANDS
