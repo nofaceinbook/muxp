@@ -1,10 +1,10 @@
-# muxp_file.py    Version: 0.2.3 exp
+# muxp_file.py    Version: 0.2.4 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
 # Used by Mesh Updater X-Plane (muxp)
 #
-# For more details refert to GitHub: https://github.com/nofaceinbook/betterflat
+# For more details refer to GitHub: https://github.com/nofaceinbook/betterflat
 #
 # WARNING: This code is still under development and may still have some errors.
 #
@@ -21,8 +21,9 @@
 
 from logging import getLogger
 from os import path, replace, walk, stat
+from math import floor
 from xplnedsf2 import getDSFproperties  ## isDSFoverlay not needed any more
-from muxp_math import doBoundingRectanglesIntersect
+from muxp_math import doBoundingRectanglesIntersect, segmentToBox
 
 def readMuxpFile(filename, logname):
     log = getLogger(logname + "." + __name__) #logging based on pre-defined logname
@@ -426,3 +427,131 @@ def areaIntersectionInProps(area, props):
         i += 1
     return None
 
+
+def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
+    #
+    # Reads boundaries, runways and airport height from airport in given apt.dat file and based
+    # on mesh type creates an according muxp-file
+    # In case apt.dat contains several airports the right airport is selected by giving the correct ICAO Code
+    # In case airport has no icoa code the identifier, use the identifier on 5th position in airport definition
+    # Each boundary is list of [lon, lat] values of vertices of the boundary
+    # Hole definition in boundary are treated the same as a boundary!!!
+    # For Bezier nodes of the boundary only the node without Bezier definitions is considered!!!
+    # Only land runways (type 100) are considered
+    #
+    log = getLogger(logname + "." + __name__)  # logging based on pre-defined logname
+    log.info("Reading airport data from: {}".format(filename))
+    Airport = False  # else first the correct icoa id has to be found before Airport becomes true
+    BoundarySection = False  # is set true when we are in boundary section in .apt file
+    bounds = []  # list of list with all boundaries found
+    bound_names = []  # names of boundaries
+    runways = [] # list of runway endpoints
+    apt_elev = None # elevation of airport in meters as in file after 130 tag
+    apt_flatten = None #includes entry if this airport has a flatten flag set
+    apt_name = None
+    lat_min = lon_min = 9999
+    lat_max = lon_max = -9999
+    if not path.isfile(filename):
+        log.error("Airport File {} does not exist!".format(filename))
+        return "Error: Airport file does not exist!"
+    with open(filename, encoding="utf8", errors="ignore") as f:
+        for line in f:
+            v = line.split()
+            if len(v) == 0:  # don't consider empty lines
+                continue
+            if len(v) > 4:  # check if correct airport section in file is reached
+                if v[0] == '1' or v[0] == '16' or v[0] == '17':
+                    if v[4] == icao_id or icao_id =='': #if no icao id is given just first airport is selected
+                        Airport = True
+                        icao_id = v[4] #set now icao id in case it was '' before
+                        apt_elev = round(int(v[1]) * 0.3048)
+                        apt_name = v[5]
+                        if len(v) > 6: apt_name = apt_name + " " + v[6]
+                        log.info("Airport {} found with elevation {} m.".format(apt_name, apt_elev))
+                    else:
+                        Airport = False  # change to false in case of new different airport
+            if Airport:
+                if v[0] == '130':
+                    BoundarySection = True
+                    bounds.append([])  # add new list of boundary vertices
+                    new_name = "bound"
+                    for v_txt in v[1:]:
+                        new_name += "_" + v_txt
+                    bound_names.append(new_name)
+                elif v[0] == '100':
+                    log.info("Runway from {}, {} to {}, {} with width {} found".format(v[9], v[10], v[18], v[19], v[1]))
+                    runways.append( [(float(v[9]), float(v[10])), (float(v[18]), float(v[19])), float(v[1]) ])
+                elif v[0] == '1302' and v[1] == 'flatten':
+                    apt_flatten = int(v[2])
+                    log.warning("Airport includes flatten flag set to: {}".format(apt_flatten))
+                elif BoundarySection:
+                    if v[0] == '111' or v[0] == '112':
+                        bounds[-1].append([float(v[2]), float(v[1])])  # Note: Bezier definitions are not considered, just the base point
+                    elif v[0] == '113' or v[0] == '114':
+                        bounds[-1].append([float(v[2]), float(v[1])])  # Note: Bezier definitions are not considered, just the base point
+                        bounds[-1].append(bounds[-1][0])  # #form closed loop by adding again first vertex
+                        BoundarySection = False
+                        log.info("Boundary no. {} with {} vertices read.".format(len(bounds), len(bounds[-1])))
+    if len(bounds) == 0 and len(runways) == 0:
+        log.error("No valid boundary or runway found in file!")
+        return "Error: No valid boundary or runway found in file!"
+    for b in range(len(bounds)):
+        for v in range(len(bounds[b])):
+            if bounds[b][v][1] < lat_min: lat_min = bounds[b][v][1]
+            if bounds[b][v][1] > lat_max: lat_max = bounds[b][v][1]
+            if bounds[b][v][0] < lon_min: lon_min = bounds[b][v][0]
+            if bounds[b][v][0] > lon_max: lon_max = bounds[b][v][0]
+
+    muxp_filename = muxpfolder + "/automuxed_airport_" + icao_id + ".muxp"
+    if path.isfile(muxp_filename):
+        log.warning("MUXP-file {} already exists! Copy previous file to {}".format(muxp_filename, muxp_filename+".bak"))
+        replace(muxp_filename, muxp_filename+".bak")
+    log.info("Writing for mesh type: {}  muxp-file: {}".format(meshtype, muxp_filename))
+    with open(muxp_filename, "w", encoding="utf8", errors="ignore") as f:
+        f.write("muxp_version: 0.1\n")
+        f.write("id: airport_{}\n".format(icao_id))
+        f.write("version: 1.0\n")
+        if meshtype == "TIN":
+            f.write("description: creating TIN for {}\n".format(apt_name))
+        elif meshtype == "flatten":
+            f.write("description: flattening of {}\n".format(apt_name))
+        else:
+            log.error("Creation of muxp file for undefined meshtype {} not possible!".format(meshtype))
+            return "Undefined mesh type requested!"
+        f.write("author: muxp_auto_creation_from_apt.dat\n")
+        tile_lat = "{0:+03d}".format(floor(lat_min))
+        tile_lon = "{0:+04d}".format(floor(lon_min))
+        f.write("tile: {}{}\n".format(tile_lat, tile_lon))
+        f.write("area: {} {} {} {}\n".format(lat_min+0.00001, lat_max+0.00001, lon_min+0.00001, lon_max+0.00001))
+
+        for n, r in enumerate(runways):
+            f.write("\n")
+            if meshtype == "TIN":
+                rwy_vec = ((r[1][0] - r[0][0])/3, (r[1][1] - r[0][1])/3)  # vector for 1/3rd of rwy
+                f.write("cut_spline_segment.runway_{}:\n".format(n))
+                f.write("   width: {}\n".format(r[2]))
+                f.write("   profile_interval: 50\n   terrain: lib/g10/terrain10/crp_wrm_sdry.ter\n")
+                f.write("   3d_coordinates:\n")
+                f.write("   - {} {} -32768\n".format(r[0][0], r[0][1]))
+                f.write("   - {} {} -32768\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
+                f.write("   - {} {} -32768\n".format(r[0][0] + 2 * rwy_vec[0], r[0][1] + 2 * rwy_vec[1]))
+                f.write("   - {} {} -32768\n".format(r[1][0], r[1][1]))
+            else:  # flatten
+                f.write("cut_polygon.runway_{}:\n".format(n))
+                f.write("   elevation: {}\n".format(apt_elev))
+                f.write("   coordinates:\n")
+                for v in segmentToBox(r[0], r[1], r[2]):
+                    f.write("   - {} {}\n".format(v[1], v[0]))
+
+        for n, b in enumerate(bounds):
+            f.write("\n")
+            if meshtype == "TIN":
+                f.write("limit_edges.{}:\n".format(bound_names[n]))
+                f.write("   edge_limit: 100\n")
+            else: #  flatten
+                f.write("cut_polygon.{}:\n".format(bound_names[n]))
+                f.write("   elevation: {}\n".format(apt_elev))
+            f.write("   coordinates:\n")
+            for v in b:
+                f.write("   - {} {}\n".format(v[1], v[0]))
+    return "File {} written".format(muxp_filename)

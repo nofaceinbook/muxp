@@ -3,11 +3,11 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.3 exp"
+muxp_VERSION = "0.2.4 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
-# For more details refert to GitHub: https://github.com/nofaceinbook/betterflat
+# For more details refer to GitHub: https://github.com/nofaceinbook/betterflat
 #
 # WARNING: This code is still under development and may still have some errors.
 #
@@ -126,7 +126,7 @@ class muxpGUI:
         self.muxp_status_label.grid(row=6, column=1, sticky=W)
         self.info_label = Label(self.window, text=" ")
         self.info_label.grid(row=7, column=1, sticky=W, pady=8)
-        self.muxp_create = Button(self.window, text='  Create muxp   ', state=DISABLED, command=lambda: self.create_muxp())
+        self.muxp_create = Button(self.window, text='  Create muxp   ', command=lambda: self.create_muxp())
         self.muxp_create.grid(row=9, column=0, sticky=E, pady=4)
         self.muxp_undo = Button(self.window, text='  Undo muxp   ', state=DISABLED, command=lambda: self.undo_muxp())
         self.muxp_undo.grid(row=9, column=2, sticky=E, pady=4)        
@@ -548,8 +548,39 @@ class muxpGUI:
         if self.conflictStrategy == "BACKUP": return filenames[1]
         if self.conflictStrategy == "ORIGINAL": return filenames[2]
         if self.conflictStrategy == "CANCEL": return None
-        
-  
+
+
+    def create_muxp(self):
+        def select_file(entry): #if file is set it is directly displayed
+            file = askopenfilename()
+            entry.delete(0, END)
+            entry.insert(0, file)
+        create_win = Toplevel(self.window)
+        create_win.attributes("-topmost", True)
+        top_create_label = Label(create_win, anchor=W, justify=LEFT, text="SUPPORTS CREATION OF  M U X P  FILES", font=('Arial',12,'bold','underline')).grid(row=0, column=1, columnspan=2, pady=10, padx=10)
+        section_apt_label = Label(create_win, anchor=W, justify=LEFT, text="Create MUXP file based on airport defintion in apt.dat file", font=('Arial',10,'bold')).grid(row=1, column=0, columnspan=3, pady=10, padx=10)
+        aptdat_label = Label(create_win, text="Create MUXP based on apt.dat for ICAO: ")
+        aptdat_label.grid(row=2, column=0, pady=4, sticky=E)
+        icao_entry = Entry(create_win, width=8)
+        icao_entry.grid(row=2, column=1, columnspan=2, sticky=W)
+        create_mesh_type = StringVar()
+        radio_TIN = Radiobutton(create_win, text="TIN", variable=create_mesh_type, value="TIN")
+        radio_TIN.grid(row=2, column=2, sticky=W)
+        radio_flatten = Radiobutton(create_win, text="flatten", variable=create_mesh_type, value="flatten")
+        radio_flatten.grid(row=2, column=3, sticky=W)
+        radio_TIN.select()
+        aptfile_label = Label(create_win, text="apt.dat file to be used:")
+        aptfile_label.grid(row=3, column=0, pady=4, sticky=E)
+        aptfile_entry = Entry(create_win, width=70)
+        aptfile_entry.grid(row=3, column=1, columnspan=3, sticky=W)
+        aptfile_entry.insert(0, self.xpfolder+"/Custom Scenery/Global Airports/Earth Nav data/apt.dat")
+        aptfile_select = Button(create_win, text='Select', command=lambda: select_file(aptfile_entry))
+        aptfile_select.grid(row=3, column=4, sticky=W, pady=4, padx=10)
+        create_muxp_button = Button(create_win, text='  CREATE MUXP  ', command=lambda: apt2muxp(aptfile_entry.get(), self.muxpfolder, LogName, icao_entry.get(), create_mesh_type.get()))
+        create_muxp_button.grid(row=4, column=1, pady=4)
+
+
+
     def runMuxp(self, filename):
         """
         Initiates updating the mesh based on the muxp file (filename).

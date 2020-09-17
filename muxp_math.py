@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.2.3 exp
+# muxp_math.py   Version: 0.2.4 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -424,9 +424,9 @@ def IsConvex(a, b, c):
         return True 
     return False 
 
-def InTriangle(a, b, c, p):
+def InTriangleBary(a, b, c, p):
     L = [0, 0, 0]
-    eps = 0.0000001
+    eps = 0.00000001  # 17.08.2020 added one "0" to resolve conflict for one tria
     # calculate barycentric coefficients for point p
     # eps is needed as error correction since for very small distances denom->0
     L[0] = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) \
@@ -438,7 +438,19 @@ def InTriangle(a, b, c, p):
     for x in L:
         if x >= 1 or x <= 0:
             return False  
-    return True  
+    return True
+
+def InTriangle(a, b, c, p):
+    c1 = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
+    #c1 = (x2-x1)*(yp-y1)-(y2-y1)*(xp-x1)
+    c2 = (c[0] - b[0]) * (p[1] - b[1]) - (c[1] - b[1]) * (p[0] - b[0])
+    #c2 = (x3-x2)*(yp-y2)-(y3-y2)*(xp-x2)
+    c3 = (a[0] - c[0]) * (p[1] - c[1]) - (a[1] - c[1]) * (p[0] - c[0])
+    #c3 = (x1-x3)*(yp-y3)-(y1-y3)*(xp-x3)
+    if (c1 < 0 and c2 < 0 and c3 < 0) or (c1 > 0 and c2 > 0 and c3 > 0):
+        return True
+    return False
+
 
 def IsClockwise(poly):
     # initialize sum with last element
@@ -463,11 +475,15 @@ def GetEar(poly):
         p1 = poly[(i-1) % size]
         p2 = poly[i % size]
         p3 = poly[(i+1) % size]
+        #print("Testing vertex i: {} to be ear ".format(i))
         if IsConvex(p1, p2, p3):
+            #print("   is convex")
             for x in poly:
                 if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
+                    #print("      but vertex x: {} is inside [{}, {}, {}]".format(x,p1,p2,p3))
                     tritest = True
             if tritest == False:
+                #print("   is ear")
                 del poly[i % size]
                 return (p1, p2, p3)
     print('GetEar(): no ear found')
