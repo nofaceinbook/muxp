@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.4 exp"
+muxp_VERSION = "0.2.5 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -558,7 +558,7 @@ class muxpGUI:
         create_win = Toplevel(self.window)
         create_win.attributes("-topmost", True)
         top_create_label = Label(create_win, anchor=W, justify=LEFT, text="SUPPORTS CREATION OF  M U X P  FILES", font=('Arial',12,'bold','underline')).grid(row=0, column=1, columnspan=2, pady=10, padx=10)
-        section_apt_label = Label(create_win, anchor=W, justify=LEFT, text="Create MUXP file based on airport defintion in apt.dat file", font=('Arial',10,'bold')).grid(row=1, column=0, columnspan=3, pady=10, padx=10)
+        section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Create MUXP file based on airport definition in apt.dat file", font=('Arial',10,'bold')).grid(row=1, column=0, columnspan=3, pady=10, padx=10)
         aptdat_label = Label(create_win, text="Create MUXP based on apt.dat for ICAO: ")
         aptdat_label.grid(row=2, column=0, pady=4, sticky=E)
         icao_entry = Entry(create_win, width=8)
@@ -578,7 +578,16 @@ class muxpGUI:
         aptfile_select.grid(row=3, column=4, sticky=W, pady=4, padx=10)
         create_muxp_button = Button(create_win, text='  CREATE MUXP  ', command=lambda: apt2muxp(aptfile_entry.get(), self.muxpfolder, LogName, icao_entry.get(), create_mesh_type.get()))
         create_muxp_button.grid(row=4, column=1, pady=4)
-
+        section_devider_1 = Label(create_win, text="                                                                                                                        ", font=('Arial',12,'bold','underline')).grid(row=5, column=0, columnspan=4)
+        section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Convert MUXP to kml file for further editing",font=('Arial', 10, 'bold')).grid(row=6, column=0, columnspan=3, pady=10, padx=10)
+        muxp2kml_file_label = Label(create_win, text="muxp file to be converted to kml:")
+        muxp2kml_file_label.grid(row=7, column=0, pady=4, sticky=E)
+        muxp2kml_file_entry = Entry(create_win, width=70)
+        muxp2kml_file_entry.grid(row=7, column=1, columnspan=3, sticky=W)
+        muxp2kml_file_select = Button(create_win, text='Select', command=lambda: select_file(muxp2kml_file_entry))
+        muxp2kml_file_select.grid(row=7, column=4, sticky=W, pady=4, padx=10)
+        convert2kml_button = Button(create_win, text='  CONVERT TO KML  ', command=lambda: muxp2kml(muxp2kml_file_entry.get(), LogName))
+        convert2kml_button.grid(row=8, column=1, pady=4)
 
 
     def runMuxp(self, filename):

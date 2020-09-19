@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.0.4"
+muxpKMLexport2_VERSION = "0.2.5"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by bflat.py (Tool for flattening X-Plane Mesh)
@@ -23,8 +23,9 @@ muxpKMLexport2_VERSION = "0.0.4"
 
 # NEW Version 0.0.4: Support to convert kml to muxp file
 
-from os import fspath
+from os import fspath, path
 from muxp_math import *
+from muxp_file import readMuxpFile, validate_muxp
 
 def kmlExport2(dsf, boundaries, extract, filename):
     
@@ -320,3 +321,66 @@ def kml2muxp(filename):
 
     return muxp_filename
 
+
+def muxp2kml(filename, logname):
+    """
+    Converts a muxp file in a kml file for further editing.
+    Edited muxp.kml file can then be read in order to adapt the mesh.
+    """
+    muxpdefs, err = readMuxpFile(filename, logname)
+    if err is not None:
+        return err
+    error, resultinfo = validate_muxp(muxpdefs, logname)
+    if error < 0: # errors above 0 mean that file can still be processed
+        return "Validation of muxp-file failed with error code {} ({})".format(error, resultinfo)
+
+    filename = fspath(filename) #encode complete filepath as required by os
+    with open(filename + ".kml", "w") as f:
+        f.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        f.write("<kml xmlns=\"http://www.opengis.net/kml/2.2\" >\n")
+        f.write("<Document>\n\n")
+        head, tail = path.split(filename)
+        f.write("<name>{}.kml</name>".format(tail))
+
+        f.write("<description>\n")
+        for d in muxpdefs:
+            if d != "area" and d != "commands":
+                f.write("{}: {}\n".format(d, muxpdefs[d]))
+        f.write("</description>\n\n")
+
+        f.write("<Style id=\"Area\"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>\n")
+        f.write("<Style id=\"Coords\"><LineStyle><color>ffff00aa</color><width>3</width></LineStyle><PolyStyle><color>40f7ffff</color></PolyStyle></Style>\n\n")
+        f.write("    <Placemark><name>area:</name><styleUrl>#Area</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
+        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
+        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][1]))
+        f.write("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][1]))
+        f.write("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][0]))
+        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
+        f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
+
+        for c in muxpdefs["commands"]:
+            f.write("\n<Folder><name>{}.{}:</name>\n".format(c["command"], c["_command_info"]))
+            f.write("<description>\n")
+            for k in c:
+                if k != "command" and k != "coordinates" and k != "3d_coordinates" and k != "_command_info":
+                    if c[k] != "" and not (k == "include_raster_square_criteria" and c[k] == "corner_inside") and not (k == "elevation" and c[k] is None):  # Don't include empty / default values
+                    ##### TBD: Make check for default values generic on default definitions #####
+                        f.write("{}: {}\n".format(k, c[k]))
+                    else:
+                        print("Not included Paramter: {} with value: {}".format(k, c[k]))
+            f.write("</description>\n")
+            if "coordinates" in c:
+                f.write("    <Placemark><name>coordinates:</name><styleUrl>#Coords</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
+                for coords in c["coordinates"]:
+                    f.write("        {},{},0\n".format(coords[0], coords[1]))
+                f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
+            if "3d_coordinates" in c:
+                f.write("    <Folder><name>3d_coordinates:</name>\n")
+                for coords in c["3d_coordinates"]:
+                    f.write("        <Placemark><name>{}</name><Point><coordinates>{},{},0</coordinates></Point></Placemark>\n".format(coords[2],coords[1],coords[0]))
+                    #### IMPORTANT: 3d_coordinates are not yet swapped between lat / lon !!!!
+                f.write("   </Folder>\n")
+            f.write("</Folder>\n")
+
+        f.write("</Document></kml>\n")
+    return

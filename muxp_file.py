@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.4 exp
+# muxp_file.py    Version: 0.2.5 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -522,7 +522,7 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
         tile_lat = "{0:+03d}".format(floor(lat_min))
         tile_lon = "{0:+04d}".format(floor(lon_min))
         f.write("tile: {}{}\n".format(tile_lat, tile_lon))
-        f.write("area: {} {} {} {}\n".format(lat_min+0.00001, lat_max+0.00001, lon_min+0.00001, lon_max+0.00001))
+        f.write("area: {} {} {} {}\n".format(lat_min-0.0001, lat_max+0.0001, lon_min-0.0001, lon_max+0.0001))
 
         for n, r in enumerate(runways):
             f.write("\n")
