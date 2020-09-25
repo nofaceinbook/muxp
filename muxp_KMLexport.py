@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.2.5"
+muxpKMLexport2_VERSION = "0.2.6"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by bflat.py (Tool for flattening X-Plane Mesh)
@@ -195,7 +195,7 @@ def kmlExport2(dsf, boundaries, extract, filename):
         f.write("</Document></kml>\n")
 
 
-def kml2muxp(filename):
+def kml2muxp(filename, no_writing=False):
     """
     :param filename: name of kml file converted to muxp file
     Writes the muxp file to same filename but removes .kml and adds .muxp if not present.
@@ -315,6 +315,12 @@ def kml2muxp(filename):
     if muxp_filename.rfind(".muxp") != len(muxp_filename) - 5:  # filename for muxp file does not end with '.muxp'
         muxp_filename += ".muxp"  # add .muxp ending
 
+    if no_writing:
+        muxpstring = ""
+        for line in muxp_lines:
+            muxpstring += line + '\n'
+        return muxpstring, muxp_filename
+
     with open(muxp_filename, "w", encoding="utf8", errors="ignore") as f:
         for line in muxp_lines:
             f.write(line + '\n')
@@ -359,7 +365,7 @@ def muxp2kml(filename, logname):
         f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
 
         for c in muxpdefs["commands"]:
-            f.write("\n<Folder><name>{}.{}:</name>\n".format(c["command"], c["_command_info"]))
+            f.write("\n<Folder><name>{}:</name>\n".format(c["_command_info"]))
             f.write("<description>\n")
             for k in c:
                 if k != "command" and k != "coordinates" and k != "3d_coordinates" and k != "_command_info":

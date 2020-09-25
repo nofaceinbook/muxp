@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.5 exp"
+muxp_VERSION = "0.2.6 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -28,7 +28,8 @@ from muxp_area import *
 from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
-from os import path, mkdir, sep
+from wed_conv import MUXP
+from os import path, mkdir, sep, replace
 from shutil import copy2
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
@@ -105,6 +106,8 @@ class muxpGUI:
         self.dsf_sceneryPack = "" #Name of the scenery Pack of dsf file to be processed
         self.conflictStrategy = "" #Strategy how to handle conflict with already existing updates in dsf-file
         self.activatePack = 0 #set to 1/True if after writing of updated dsf file it shall be ensured that scenery is activated in scenery_Packs.ini
+
+        self.button_selected = None  # keeps track of selected button in GUI
 
         self.header = Label(self.window, text="WARNING - This is still a test version.")
         self.header.grid(row=0, column=0, columnspan=2)
@@ -551,15 +554,80 @@ class muxpGUI:
 
 
     def create_muxp(self):
+        def set_button_selected(value):
+            self.button_selected = value
         def select_file(entry): #if file is set it is directly displayed
             file = askopenfilename()
             entry.delete(0, END)
             entry.insert(0, file)
+        def warn_overwrite(file):
+            warnov_win = Toplevel(self.window)
+            warnov_win.attributes("-topmost", True)
+            warnov_label = Label(warnov_win, text="WARNING: Backupfile {} already exists!\nWhen you would like to keep it select CANCEL and rename it first.".format(file))
+            warnov_label.grid(row=0, column=0, columnspan=2)
+            overwrite_button = Button(warnov_win, text='  OVERWRITE  ', command=lambda: set_button_selected("OVERWRITE"))
+            overwrite_button.grid(row=2, column=0, pady=4)
+            cancel_button = Button(warnov_win, text='  CANCEL  ', command=lambda: set_button_selected("CANCEL"))
+            cancel_button.grid(row=2, column=1, pady=4)
+            while self.button_selected is None:
+                warnov_win.update()
+            warnov_win.destroy()
+            result = (self.button_selected + '.')[:-1]  # create new string, not just copy reference
+            self.button_selected = None
+            return result
+        def process_file(action, source, destination, info_field):
+            info_field.config(state=NORMAL)
+            result, error = None, None
+            info_field.insert(END, "\nStarting {} for file {} ...\n".format(action, source))
+            if not path.isfile(source):
+                info_field.insert(END, "  ERROR: File does not exist!\n")
+                info_field.config(state=DISABLED)
+                info_field.yview(END)
+                return
+            if action == "INJECT IN WED":
+                if not path.isfile(destination):  # special case where destination needs present for injection
+                    error = "WED file: {} does not exist for injecting MUXP file.".format(destination)
+                else:
+                    muxp = MUXP(source)
+                    result = muxp.wed_inject(destination)
+                    if not result:
+                        error = "Injection of MUXP into WED did not work."
+            elif action == "CONVERT WED TO MUXP":
+                muxp = MUXP()
+                result = muxp.wed2muxp(source)
+                if not result:
+                    error = "Conversion from WED to MUXP did not work."
+            elif action == "CONVERT KML TO MUXP":
+                result, destination = kml2muxp(source, no_writing=True)
+            if error:
+                info_field.insert(END, "  ERROR: {}\n".format(error))
+                info_field.config(state=DISABLED)
+                info_field.yview(END)
+                return
+            if path.isfile(destination):
+                info_field.insert(END, "  WARNING: Destination file {} already exists.\n".format(destination))
+                bak_file = destination + ".bak"
+                if path.isfile(bak_file):
+                    info_field.insert(END, "  WARNING: Backup file {} also exists.\n".format(bak_file))
+                    choice = warn_overwrite(bak_file)
+                    if choice == "CANCEL":
+                        info_field.insert(END, "  Canceled current action!\n")
+                        info_field.config(state=DISABLED)
+                        info_field.yview(END)
+                        return
+                    info_field.insert(END, "  Overwriting backup file\n")
+                replace(destination, bak_file)
+                info_field.insert(END, "     --> Created backup to file: {}\n".format(bak_file))
+            with open(destination, 'w') as f:
+                f.write(result)
+                info_field.insert(END, "  Finished successful writing: {}\n".format(destination))
+            info_field.config(state=DISABLED)
+            info_field.yview(END)
+
         create_win = Toplevel(self.window)
-        create_win.attributes("-topmost", True)
-        top_create_label = Label(create_win, anchor=W, justify=LEFT, text="SUPPORTS CREATION OF  M U X P  FILES", font=('Arial',12,'bold','underline')).grid(row=0, column=1, columnspan=2, pady=10, padx=10)
+        top_create_label = Label(create_win, anchor=W, justify=LEFT, text="SUPPORTS CREATION OF  M U X P  FILES", font=('Arial',12,'bold')).grid(row=0, column=1, columnspan=2, pady=10, padx=10)
         section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Create MUXP file based on airport definition in apt.dat file", font=('Arial',10,'bold')).grid(row=1, column=0, columnspan=3, pady=10, padx=10)
-        aptdat_label = Label(create_win, text="Create MUXP based on apt.dat for ICAO: ")
+        aptdat_label = Label(create_win, text="ICAO in apt.dat: ")
         aptdat_label.grid(row=2, column=0, pady=4, sticky=E)
         icao_entry = Entry(create_win, width=8)
         icao_entry.grid(row=2, column=1, columnspan=2, sticky=W)
@@ -569,7 +637,7 @@ class muxpGUI:
         radio_flatten = Radiobutton(create_win, text="flatten", variable=create_mesh_type, value="flatten")
         radio_flatten.grid(row=2, column=3, sticky=W)
         radio_TIN.select()
-        aptfile_label = Label(create_win, text="apt.dat file to be used:")
+        aptfile_label = Label(create_win, text="apt.dat file:")
         aptfile_label.grid(row=3, column=0, pady=4, sticky=E)
         aptfile_entry = Entry(create_win, width=70)
         aptfile_entry.grid(row=3, column=1, columnspan=3, sticky=W)
@@ -579,15 +647,40 @@ class muxpGUI:
         create_muxp_button = Button(create_win, text='  CREATE MUXP  ', command=lambda: apt2muxp(aptfile_entry.get(), self.muxpfolder, LogName, icao_entry.get(), create_mesh_type.get()))
         create_muxp_button.grid(row=4, column=1, pady=4)
         section_devider_1 = Label(create_win, text="                                                                                                                        ", font=('Arial',12,'bold','underline')).grid(row=5, column=0, columnspan=4)
-        section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Convert MUXP to kml file for further editing",font=('Arial', 10, 'bold')).grid(row=6, column=0, columnspan=3, pady=10, padx=10)
-        muxp2kml_file_label = Label(create_win, text="muxp file to be converted to kml:")
+        section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Convert MUXP to kml file for further editing and back to MUXP",font=('Arial', 10, 'bold')).grid(row=6, column=0, columnspan=3, pady=10, padx=10)
+        muxp2kml_file_label = Label(create_win, text="muxp or kml file:")
         muxp2kml_file_label.grid(row=7, column=0, pady=4, sticky=E)
         muxp2kml_file_entry = Entry(create_win, width=70)
         muxp2kml_file_entry.grid(row=7, column=1, columnspan=3, sticky=W)
         muxp2kml_file_select = Button(create_win, text='Select', command=lambda: select_file(muxp2kml_file_entry))
         muxp2kml_file_select.grid(row=7, column=4, sticky=W, pady=4, padx=10)
-        convert2kml_button = Button(create_win, text='  CONVERT TO KML  ', command=lambda: muxp2kml(muxp2kml_file_entry.get(), LogName))
+        convert2kml_button = Button(create_win, text='  MUXP TO KML  ', command=lambda: muxp2kml(muxp2kml_file_entry.get(), LogName))
         convert2kml_button.grid(row=8, column=1, pady=4)
+        convert2muxp_button = Button(create_win, text='  KML TO MUXP  ', command=lambda: process_file("CONVERT KML TO MUXP", muxp2kml_file_entry.get(), None, info_text))
+        convert2muxp_button.grid(row=8, column=2, pady=4)
+
+        section_devider_2 = Label(create_win, text="                                                                                                                        ", font=('Arial',12,'bold','underline')).grid(row=9, column=0, columnspan=4)
+        section_wed_label = Label(create_win, anchor=E, justify=LEFT, text="Conversion Between MUXP and WED Files                      ",font=('Arial', 10, 'bold')).grid(row=10, column=0, columnspan=3, pady=10, padx=10)
+        muxp2wed_file_label = Label(create_win, text="muxp file:")
+        muxp2wed_file_label.grid(row=11, column=0, pady=4, sticky=E)
+        muxp2wed_file_entry = Entry(create_win, width=70)
+        muxp2wed_file_entry.grid(row=11, column=1, columnspan=3, sticky=W)
+        muxp2wed_file_select = Button(create_win, text='Select', command=lambda: select_file(muxp2wed_file_entry))
+        muxp2wed_file_select.grid(row=11, column=4, sticky=W, pady=4, padx=10)
+        wed_file_label = Label(create_win, text="wed file:")
+        wed_file_label.grid(row=12, column=0, pady=4, sticky=E)
+        wed_file_entry = Entry(create_win, width=70)
+        wed_file_entry.grid(row=12, column=1, columnspan=3, sticky=W)
+        wed_file_select = Button(create_win, text='Select', command=lambda: select_file(wed_file_entry))
+        wed_file_select.grid(row=12, column=4, sticky=W, pady=4, padx=10)
+        muxp2wed_button = Button(create_win, text='  INJECT MUXP IN WED  ', command=lambda: process_file("INJECT IN WED", muxp2wed_file_entry.get(), wed_file_entry.get(), info_text))
+        muxp2wed_button.grid(row=14, column=1, pady=4)
+        wed2muxp_button = Button(create_win, text='  CONVERT WED TO MUXP  ', command=lambda: process_file("CONVERT WED TO MUXP", wed_file_entry.get(), muxp2wed_file_entry.get(), info_text))
+        wed2muxp_button.grid(row=14, column=2, pady=4)
+        info_text = Text(create_win,  height=4, state=DISABLED)
+        info_text.grid(row=15, column=0, columnspan=5, padx=4, pady=6)
+        scrollbar = Scrollbar(create_win, command=info_text.yview)
+        scrollbar.grid(row=15, column=5, sticky='nsew')
 
 
     def runMuxp(self, filename):
