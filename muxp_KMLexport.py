@@ -26,6 +26,7 @@ muxpKMLexport2_VERSION = "0.2.6"
 from os import fspath, path
 from muxp_math import *
 from muxp_file import readMuxpFile, validate_muxp
+from xmltodict import parse
 
 def kmlExport2(dsf, boundaries, extract, filename):
     
@@ -194,19 +195,17 @@ def kmlExport2(dsf, boundaries, extract, filename):
 
         f.write("</Document></kml>\n")
 
+"""
+def kml2muxp_OLD(filename):
 
-def kml2muxp(filename, no_writing=False):
-    """
-    :param filename: name of kml file converted to muxp file
-    Writes the muxp file to same filename but removes .kml and adds .muxp if not present.
-    WARNING: existing files will be directly overwritten!
-    :return: name of muxp-file created
-    """
     muxp_lines = []  # will at the end contain the muxp file data
     area_lon = []
     area_lat = []
-    elev_3d = None  # used to store elevation of 3d coordiontes coming before coordinates
+    elev_3d = None  # used to store elevation of 3d coordinates coming before coordinates
     context = None  # current context we are in kml file
+
+    if not path.isfile(filename):
+        return None, "ERROR: file does not exist"
 
     with open(filename, encoding="utf8", errors="ignore") as f:
         for line in f:
@@ -230,7 +229,7 @@ def kml2muxp(filename, no_writing=False):
                 if line.find('</description>') >= 0:
                     line = line[:line.find('</description>')]
                     context = "Document"
-                muxp_lines.append(line.strip())
+                muxp_lines.append(line.strip() + '\n')
             if context == "Document_Placemark":
                 if line.find('<name>') >= 0 and line.find('area:') >= 0:
                     context = "Area_Definition"
@@ -241,7 +240,7 @@ def kml2muxp(filename, no_writing=False):
             if context == "Area_Coordinates":
                 if line.find('</coordinates>') >= 0:
                     line = line[:line.find('</coordinates>')]
-                    muxp_lines.append("area: {} {} {} {}".format(min(area_lon), max(area_lon), min(area_lat), max(area_lat)))
+                    muxp_lines.append("area: {} {} {} {}\n".format(min(area_lon), max(area_lon), min(area_lat), max(area_lat)))
                     context = "Document"
                 line = line.strip()
                 line = line.split()
@@ -251,12 +250,12 @@ def kml2muxp(filename, no_writing=False):
                     area_lon.append(float(v[1]))
             if context == "Folder":
                 if line.find('<name>') >= 0 and line.find(':') >= 0:
-                    muxp_lines.append("")  # empty line for new starting command
-                    muxp_lines.append(line[line.find('<name>') + 6:line.find('</name>')])
+                    muxp_lines.append("\n")  # empty line for new starting command
+                    muxp_lines.append(line[line.find('<name>') + 6:line.find('</name>')] + '\n')
                 if line.find('<description>') >= 0:
                     line = line[line.find('<description>') + 13:]
                     if line.find('</description>') >= 0:
-                        muxp_lines.append("    {}".format(line[:line.find('</description>')]))
+                        muxp_lines.append("    {}\n".format(line[:line.find('</description>')]))
                     else:
                         context = "Command_Parameters"
                 if line.find('<Placemark>') >= 0:
@@ -270,12 +269,12 @@ def kml2muxp(filename, no_writing=False):
                     line = line[:line.find('</description>')]
                     context = "Folder"
                 line = line.strip()
-                muxp_lines.append("    {}".format(line))
+                muxp_lines.append("    {}\n".format(line))
             if context == "Folder_Placemark":
                 if line.find('</Placemark>') >= 0:
                     context = "Folder"
                 if line.find('<name>') >= 0 and line.find(':') >= 0:
-                    muxp_lines.append("    {}".format(line[line.find('<name>') + 6:line.find('</name>')]))
+                    muxp_lines.append("    {}\n".format(line[line.find('<name>') + 6:line.find('</name>')]))
                     context = "Coords_Definition"
             if context == "Coords_Definition":
                 if line.find('<coordinates>') >= 0:
@@ -289,10 +288,10 @@ def kml2muxp(filename, no_writing=False):
                 line = line.split()
                 for v in line:
                     v = v.split(',')
-                    muxp_lines.append("    - {} {}".format(v[1], v[0]))
+                    muxp_lines.append("    - {} {}\n".format(v[1], v[0]))
             if context == "Subfolder":
                 if line.find('<name>') >= 0 and line.find('3d_coordinates:') >= 0:
-                    muxp_lines.append("    {}".format(line[line.find('<name>') + 6:line.find('</name>')]))
+                    muxp_lines.append("    {}\n".format(line[line.find('<name>') + 6:line.find('</name>')]))
                     context = "3d_coordinates"
                     continue  #### assume name for folder is in separat line, no conflict with name of 3d elevation points below
                 if line.find("</Folder>") >= 0:
@@ -305,7 +304,7 @@ def kml2muxp(filename, no_writing=False):
                     line = line[line.find('<coordinates>') + 13:line.find('</coordinates>')]
                     line = line.strip()
                     v = line.split(',')
-                    muxp_lines.append("    - {} {} {}".format(v[1], v[0], elev_3d))
+                    muxp_lines.append("    - {} {} {}\n".format(v[1], v[0], elev_3d))
                 if line.find('</Folder>') >= 0:
                     context = "Folder"  # Subfoler ends here
 
@@ -315,17 +314,102 @@ def kml2muxp(filename, no_writing=False):
     if muxp_filename.rfind(".muxp") != len(muxp_filename) - 5:  # filename for muxp file does not end with '.muxp'
         muxp_filename += ".muxp"  # add .muxp ending
 
-    if no_writing:
-        muxpstring = ""
-        for line in muxp_lines:
-            muxpstring += line + '\n'
-        return muxpstring, muxp_filename
+    return "".join(muxp_lines), muxp_filename
+"""
 
-    with open(muxp_filename, "w", encoding="utf8", errors="ignore") as f:
-        for line in muxp_lines:
-            f.write(line + '\n')
+def kml2muxp(filename):
+    """
+    :param filename: name of kml file converted to muxp file
+    Returns also same filename but removes .kml and adds .muxp if not present.
+    :return: muxp_file_string, name of muxp-file created or error_string if muxp_file is None
+    """
+    xml = parse(open(filename).read())
+    muxp = ""
+    try:
+        doc = xml['kml']['Document']
+    except KeyError:
+        return None, "Not kml Document file!"
+    try:
+        muxp += doc['description'] + '\n'
+    except KeyError:
+        return None, "Muxp header info in document description missing!"
+    try:
+        if doc['Placemark']['name'] != "area:":
+            return None, "First Placemark is not area"
+    except (KeyError, TypeError):
+        return None, "No or too many Placemarks in kml main doc. Just one Placemark area needed!"
+    try:
+        area_lines = doc['Placemark']['Polygon']['outerBoundaryIs']['LinearRing']['coordinates']
+        area_lines = area_lines.replace('\n', ' ')
+        area_lines = area_lines.split()
+        area_lat, area_lon = [], []
+        for line in area_lines:
+            coords = line.split(',')
+            area_lat.append(float(coords[0]))
+            area_lon.append(float(coords[1]))
+        muxp += ("area: {} {} {} {}\n".format(min(area_lon), max(area_lon), min(area_lat), max(area_lat)))
+    except KeyError:
+        return None, "Coordinates of area missing"
+    try:
+        test = doc['Folder']
+    except KeyError:
+        return None, "Folders with commands missing!"
+    try:  # Test if there is just one folder = one command
+        test = doc['Folder']['name']
+        doc['Folder'] = [doc['Folder']]  # convert single command to list in order to proceed
+    except:
+        test = "not needed"
 
-    return muxp_filename
+    for folder in doc['Folder']:  # Folders with commands
+        muxp += '\n'  # add new line before new command
+        try:
+            muxp += folder['name'] + '\n'
+        except KeyError:
+            continue
+        try:
+            desc_lines = folder['description'].split('\n')
+            for line in desc_lines:
+                muxp += "   {}\n".format(line.strip())
+        except KeyError:
+            desc = ""
+        try:
+            if folder['Placemark']['name'] == "coordinates:":
+                coords_lines = folder['Placemark']['Polygon']['outerBoundaryIs']['LinearRing']['coordinates']
+                coords_lines = coords_lines.replace('\n', ' ')
+                coords_lines = coords_lines.split()
+                muxp += "   coordinates:\n"
+                for line in coords_lines:
+                    coords = line.split(',')
+                    muxp += "   - {} {}\n".format(coords[1].strip(), coords[0].strip())
+        except KeyError:
+            coords = ""
+        try:
+            if folder['Folder']['name'] == "3d_coordinates:":
+                muxp += "   3d_coordinates:\n"
+                try:  # single 3d coordinate
+                    point = folder['Folder']['Placemark']['Point']['coordinates'].split(',')
+                    elev = folder['Folder']['Placemark']['name']
+                    muxp += "   - {} {} {}\n".format(point[1].strip(), point[0].strip(), elev.strip())
+                except TypeError:   # multiple 3d coordinates
+                    try:
+                        for place in folder['Folder']['Placemark']:
+                            point = place['Point']['coordinates'].split(',')
+                            elev = place['name']
+                            muxp += "   - {} {} {}\n".format(point[1].strip(), point[0].strip(), elev.strip())
+                    except KeyError:
+                        return None, "Syntax Error in multiple 3d_coordinate!"
+                except KeyError:
+                    return None, "Syntax Error in single 3d_coordinate!"
+        except KeyError:  # No 3d_coordinates present within this command
+            coords = ""
+
+    muxp_filename = filename
+    if muxp_filename.rfind(".kml") == len(muxp_filename) - 4:  # filename for muxp file ends with '.kml'
+        muxp_filename = muxp_filename[:muxp_filename.rfind(".kml")]  # remove
+    if muxp_filename.rfind(".muxp") != len(muxp_filename) - 5:  # filename for muxp file does not end with '.muxp'
+        muxp_filename += ".muxp"  # add .muxp ending
+
+    return muxp, muxp_filename
 
 
 def muxp2kml(filename, logname):

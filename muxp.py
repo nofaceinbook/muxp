@@ -29,11 +29,12 @@ from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
 from wed_conv import MUXP
-from os import path, mkdir, sep, replace
+from os import path, remove, mkdir, sep, replace
 from shutil import copy2
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
 from sys import argv, exit #### exit just for testing !!!####
+
 
 
 def displayHelp(win):
@@ -598,7 +599,9 @@ class muxpGUI:
                 if not result:
                     error = "Conversion from WED to MUXP did not work."
             elif action == "CONVERT KML TO MUXP":
-                result, destination = kml2muxp(source, no_writing=True)
+                result, destination = kml2muxp(source)
+                if not result:
+                    error = destination  # in case kml2muxp has error, the error is within second argument
             if error:
                 info_field.insert(END, "  ERROR: {}\n".format(error))
                 info_field.config(state=DISABLED)
@@ -618,9 +621,9 @@ class muxpGUI:
                     info_field.insert(END, "  Overwriting backup file\n")
                 replace(destination, bak_file)
                 info_field.insert(END, "     --> Created backup to file: {}\n".format(bak_file))
-            with open(destination, 'w') as f:
+            with open(destination, 'w', errors="ignore") as f:
                 f.write(result)
-                info_field.insert(END, "  Finished successful writing: {}\n".format(destination))
+            info_field.insert(END, "  Finished successful writing: {}\n".format(destination))
             info_field.config(state=DISABLED)
             info_field.yview(END)
 
@@ -703,13 +706,35 @@ class muxpGUI:
             self.getConfig()  # re-set all config variables based on config.file for next run
 
         ########## IN CASE OF .kml FILE CONVERT TO MUXP FIRST #########
+        """
         if filename.rfind(".kml") == len(filename) - 4:  # filename ends with '.kml'
             log.info("Converting kml file: {} to muxp-file.".format(filename))
             filename = kml2muxp(filename)  # converts kml file to a new muxp file (ending .muxp)
             log.info("Finished conversion. Processing now: {}".format(filename))
+        """
+
+        ##### IN CASE CONVERSION FROM KML/WED TO MUXP NEEDED ########
+        if filename.rfind(".wed.xml") == len(filename) - 8 or filename.rfind(".kml") == len(filename) - 4:
+            log.info("Converting file: {} to muxp-file.".format(filename))
+            if filename.rfind(".wed.xml") == len(filename) - 8:
+                muxp = MUXP()
+                result = muxp.wed2muxp(filename)
+            else:  # muxp-file given
+                result, error = kml2muxp(filename)
+            if not result:
+                showRunResult("Conversion ERROR", error, True)
+                return -35
+            filename += "_temporary_conversion_file.muxp"
+            with open(filename, 'w', errors="ignore") as f:
+                f.write(result)
+            log.info("Finished conversion. Processing now: {}".format(filename))
 
         ############# READ AND EVALUATE MUXP FILE #####################
         update, error = readMuxpFile(filename, LogName)
+        if filename.rfind("_temporary_conversion_file.muxp") > 0:
+            log.info("FOLLOWING TEMPORARY MUXP FILE WAS READ: {}\n".format(update))
+            remove(filename)  # remove temporary conversion file created above
+            log.info("Temporary muxp file: {} removed.".format(filename))
         if update == None:
             showRunResult("muxp-file ERROR", "MUXP-file {} not found.".format(filename), True)
             return -1

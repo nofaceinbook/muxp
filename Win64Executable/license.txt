@@ -17,7 +17,7 @@ after adaption in WED converts back to muxp files:
 https://bitbucket.org/marangonico/muxp_conv/src/master/
 This code is included in MUXP with his explicit allowance. Thank you very much Nicola for this great extra.
 
-muxp_conv makes use of XMLtoDict (refer to https://pypi.org/project/xmltodict/) and
+muxp_conv and muxp make use of XMLtoDict (refer to https://pypi.org/project/xmltodict/) and
 PyYaml (https://pypi.org/project/PyYAML/) which are both published under MIT License.
 
 The library pylzma for reading 7zip-archive files (in that case zipped dsf-files).
