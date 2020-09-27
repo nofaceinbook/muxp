@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.6 exp"
+muxp_VERSION = "0.2.7 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -553,29 +553,29 @@ class muxpGUI:
         if self.conflictStrategy == "ORIGINAL": return filenames[2]
         if self.conflictStrategy == "CANCEL": return None
 
-
-    def create_muxp(self):
+    def warn_window(self, message, b1="OK", b2="CANCEL"):
         def set_button_selected(value):
             self.button_selected = value
+        warn_win = Toplevel(self.window)
+        warn_win.attributes("-topmost", True)
+        warn_label = Label(warn_win, text=message)
+        warn_label.grid(row=0, column=0, columnspan=2)
+        b1_button = Button(warn_win, text='  {}  '.format(b1), command=lambda: set_button_selected(b1))
+        b1_button.grid(row=2, column=0, pady=4)
+        b2_button = Button(warn_win, text='  {}  '.format(b2), command=lambda: set_button_selected(b2))
+        b2_button.grid(row=2, column=1, pady=4)
+        while self.button_selected is None:
+            warn_win.update()
+        warn_win.destroy()
+        result = (self.button_selected + '.')[:-1]  # create new string, not just copy reference
+        self.button_selected = None
+        return result
+
+    def create_muxp(self):
         def select_file(entry): #if file is set it is directly displayed
             file = askopenfilename()
             entry.delete(0, END)
             entry.insert(0, file)
-        def warn_overwrite(file):
-            warnov_win = Toplevel(self.window)
-            warnov_win.attributes("-topmost", True)
-            warnov_label = Label(warnov_win, text="WARNING: Backupfile {} already exists!\nWhen you would like to keep it select CANCEL and rename it first.".format(file))
-            warnov_label.grid(row=0, column=0, columnspan=2)
-            overwrite_button = Button(warnov_win, text='  OVERWRITE  ', command=lambda: set_button_selected("OVERWRITE"))
-            overwrite_button.grid(row=2, column=0, pady=4)
-            cancel_button = Button(warnov_win, text='  CANCEL  ', command=lambda: set_button_selected("CANCEL"))
-            cancel_button.grid(row=2, column=1, pady=4)
-            while self.button_selected is None:
-                warnov_win.update()
-            warnov_win.destroy()
-            result = (self.button_selected + '.')[:-1]  # create new string, not just copy reference
-            self.button_selected = None
-            return result
         def process_file(action, source, destination, info_field):
             info_field.config(state=NORMAL)
             result, error = None, None
@@ -598,10 +598,20 @@ class muxpGUI:
                 result = muxp.wed2muxp(source)
                 if not result:
                     error = "Conversion from WED to MUXP did not work."
+            elif action == "CONVERT MUXP TO KML":
+                result, destination = muxp2kml(source, LogName)
+                if not result:
+                    error = destination  # in case muxp2kml has error, the error is within second argument
             elif action == "CONVERT KML TO MUXP":
                 result, destination = kml2muxp(source)
                 if not result:
                     error = destination  # in case kml2muxp has error, the error is within second argument
+            elif action == "CREATE MUXP FROM APT":
+                # destination includes list with ICAO code and mesh_type
+                result, destination = apt2muxp(source, self.muxpfolder, LogName, destination[0], destination[1])
+                if not result:
+                    error = destination  # in case apt2muxp has error, the error is within second argument
+
             if error:
                 info_field.insert(END, "  ERROR: {}\n".format(error))
                 info_field.config(state=DISABLED)
@@ -612,7 +622,8 @@ class muxpGUI:
                 bak_file = destination + ".bak"
                 if path.isfile(bak_file):
                     info_field.insert(END, "  WARNING: Backup file {} also exists.\n".format(bak_file))
-                    choice = warn_overwrite(bak_file)
+                    #choice = warn_overwrite(bak_file)
+                    choice = self.warn_window("WARNING: Backupfile {} already exists!\nWhen you would like to keep it select CANCEL and rename it first.".format(bak_file), "OVERWRITE", "CANCEL")
                     if choice == "CANCEL":
                         info_field.insert(END, "  Canceled current action!\n")
                         info_field.config(state=DISABLED)
@@ -647,7 +658,7 @@ class muxpGUI:
         aptfile_entry.insert(0, self.xpfolder+"/Custom Scenery/Global Airports/Earth Nav data/apt.dat")
         aptfile_select = Button(create_win, text='Select', command=lambda: select_file(aptfile_entry))
         aptfile_select.grid(row=3, column=4, sticky=W, pady=4, padx=10)
-        create_muxp_button = Button(create_win, text='  CREATE MUXP  ', command=lambda: apt2muxp(aptfile_entry.get(), self.muxpfolder, LogName, icao_entry.get(), create_mesh_type.get()))
+        create_muxp_button = Button(create_win, text='  CREATE MUXP  ', command=lambda: process_file("CREATE MUXP FROM APT", aptfile_entry.get(), [icao_entry.get(), create_mesh_type.get()], info_text))
         create_muxp_button.grid(row=4, column=1, pady=4)
         section_devider_1 = Label(create_win, text="                                                                                                                        ", font=('Arial',12,'bold','underline')).grid(row=5, column=0, columnspan=4)
         section_apt_label = Label(create_win, anchor=E, justify=LEFT, text="Convert MUXP to kml file for further editing and back to MUXP",font=('Arial', 10, 'bold')).grid(row=6, column=0, columnspan=3, pady=10, padx=10)
@@ -657,7 +668,7 @@ class muxpGUI:
         muxp2kml_file_entry.grid(row=7, column=1, columnspan=3, sticky=W)
         muxp2kml_file_select = Button(create_win, text='Select', command=lambda: select_file(muxp2kml_file_entry))
         muxp2kml_file_select.grid(row=7, column=4, sticky=W, pady=4, padx=10)
-        convert2kml_button = Button(create_win, text='  MUXP TO KML  ', command=lambda: muxp2kml(muxp2kml_file_entry.get(), LogName))
+        convert2kml_button = Button(create_win, text='  MUXP TO KML  ', command=lambda: process_file("CONVERT MUXP TO KML", muxp2kml_file_entry.get(), None, info_text))
         convert2kml_button.grid(row=8, column=1, pady=4)
         convert2muxp_button = Button(create_win, text='  KML TO MUXP  ', command=lambda: process_file("CONVERT KML TO MUXP", muxp2kml_file_entry.get(), None, info_text))
         convert2muxp_button.grid(row=8, column=2, pady=4)
@@ -705,13 +716,6 @@ class muxpGUI:
                 log.info(status + " // " + info)
             self.getConfig()  # re-set all config variables based on config.file for next run
 
-        ########## IN CASE OF .kml FILE CONVERT TO MUXP FIRST #########
-        """
-        if filename.rfind(".kml") == len(filename) - 4:  # filename ends with '.kml'
-            log.info("Converting kml file: {} to muxp-file.".format(filename))
-            filename = kml2muxp(filename)  # converts kml file to a new muxp file (ending .muxp)
-            log.info("Finished conversion. Processing now: {}".format(filename))
-        """
 
         ##### IN CASE CONVERSION FROM KML/WED TO MUXP NEEDED ########
         if filename.rfind(".wed.xml") == len(filename) - 8 or filename.rfind(".kml") == len(filename) - 4:
@@ -1153,8 +1157,39 @@ class muxpGUI:
             if c["command"] == "exit_without_update":
                 return 99
 
+            if c["command"] == "unflatten_default_apt":
+                log.info("Default Airport with ICAO: {} shall not be flattened.".format(c["name"]))
+                apt_default_file = path.join(self.xpfolder, "Custom Scenery", "Global Airports", "Earth nav data", "apt.dat")
+                log.info("Checking for flattening flag in default airport definition file: {}".format(apt_default_file))
+                if not path.isfile(apt_default_file):
+                    log.error("Default apt.dat not found. No unflatting performed!")
+                else:
+                    code, new_aptdat = unflatten_apt(apt_default_file, c["name"], LogName)
+                    if code < 0:
+                        log.error("Processing Error in default apt.dat: {}".format(new_aptdat))
+                    elif code == 0:
+                        log.info("No flattening flag set, nothing changed")
+                    elif code == 1:
+                        log.info("TBD Flattening default apt.dat")
+                        warn_message =  "The airport: {} that should by changed by MUXP\n".format(c["name"])
+                        warn_message += "is set to flatten in the default apt.dat file:\n"
+                        warn_message += "{}\n\n".format(apt_default_file)
+                        warn_message += "In order to make changes by MUXP visible, MUXP\n"
+                        warn_message += "will set the flatten flag in this file to a\n"
+                        warn_message += "comment line: # 1302 flatten 1  # removed flattening by MUXP\n\n"
+                        if not path.isfile(apt_default_file+".beforeMUXP"):  # check if BackupFile exists
+                            warn_message += "As this is the first change by MUXP, MUXP will also create\n"
+                            warn_message += "a backup file called apt.dat.beforeMUXP in the apt.dat directory."
+                        selection = self.warn_window(warn_message)
+                        if selection == "OK":
+                            if not path.isfile(apt_default_file + ".beforeMUXP"):  # check if BackupFile exists
+                                copy2(apt_default_file, apt_default_file + ".beforeMUXP")
+                            with open(apt_default_file, 'w', errors="ignore") as f:
+                                f.write(new_aptdat)
+
+
         log.info("DSF vertices will be created with scaling: {}".format(elevation_scale))
-        self.muxp_status_label.config(text = "Creating new vertices and\n   insert mesh update in dsf file")  
+        self.muxp_status_label.config(text="Creating new vertices and\n   insert mesh update in dsf file")
         self.window.update()
         a.validate_mesh()
         a.createDSFVertices(elevation_scale)

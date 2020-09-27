@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.2.6"
+muxpKMLexport2_VERSION = "0.2.7"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by bflat.py (Tool for flattening X-Plane Mesh)
@@ -195,127 +195,6 @@ def kmlExport2(dsf, boundaries, extract, filename):
 
         f.write("</Document></kml>\n")
 
-"""
-def kml2muxp_OLD(filename):
-
-    muxp_lines = []  # will at the end contain the muxp file data
-    area_lon = []
-    area_lat = []
-    elev_3d = None  # used to store elevation of 3d coordinates coming before coordinates
-    context = None  # current context we are in kml file
-
-    if not path.isfile(filename):
-        return None, "ERROR: file does not exist"
-
-    with open(filename, encoding="utf8", errors="ignore") as f:
-        for line in f:
-            if line.find('<Document>') >= 0:
-                context = "Document"
-                line = line[line.find('<Document>') + 10:]
-            if context == "Document":
-                if line.find('<description>') >= 0:
-                    context = "muxp_header"
-                    line = line[line.find('<description>') + 13:]
-                if line.find('<Placemark>') >= 0:
-                    context = "Document_Placemark"
-                if line.find('</Placemark>') >= 0:
-                    context = "Document"
-                if line.find('<Folder>') >= 0:
-                    context = "Folder"
-                    continue  ###### Assume no other tag than folder in one line; by this have chance to detect subfolder below
-                if line.find('</Folder>') >= 0:
-                    context = "Document"
-            if context == "muxp_header":
-                if line.find('</description>') >= 0:
-                    line = line[:line.find('</description>')]
-                    context = "Document"
-                muxp_lines.append(line.strip() + '\n')
-            if context == "Document_Placemark":
-                if line.find('<name>') >= 0 and line.find('area:') >= 0:
-                    context = "Area_Definition"
-            if context == "Area_Definition":
-                if line.find('<coordinates>') >= 0:
-                    line = line[line.find('<coordinates>') + 13:]
-                    context = "Area_Coordinates"
-            if context == "Area_Coordinates":
-                if line.find('</coordinates>') >= 0:
-                    line = line[:line.find('</coordinates>')]
-                    muxp_lines.append("area: {} {} {} {}\n".format(min(area_lon), max(area_lon), min(area_lat), max(area_lat)))
-                    context = "Document"
-                line = line.strip()
-                line = line.split()
-                for v in line:
-                    v = v.split(',')
-                    area_lat.append(float(v[0]))
-                    area_lon.append(float(v[1]))
-            if context == "Folder":
-                if line.find('<name>') >= 0 and line.find(':') >= 0:
-                    muxp_lines.append("\n")  # empty line for new starting command
-                    muxp_lines.append(line[line.find('<name>') + 6:line.find('</name>')] + '\n')
-                if line.find('<description>') >= 0:
-                    line = line[line.find('<description>') + 13:]
-                    if line.find('</description>') >= 0:
-                        muxp_lines.append("    {}\n".format(line[:line.find('</description>')]))
-                    else:
-                        context = "Command_Parameters"
-                if line.find('<Placemark>') >= 0:
-                    context = "Folder_Placemark"
-                if line.find("</Folder>") >= 0:
-                    context = "Document"
-                if line.find("<Folder>") >= 0:
-                    context = "Subfolder"
-            if context == "Command_Parameters":
-                if line.find('</description>') >= 0:
-                    line = line[:line.find('</description>')]
-                    context = "Folder"
-                line = line.strip()
-                muxp_lines.append("    {}\n".format(line))
-            if context == "Folder_Placemark":
-                if line.find('</Placemark>') >= 0:
-                    context = "Folder"
-                if line.find('<name>') >= 0 and line.find(':') >= 0:
-                    muxp_lines.append("    {}\n".format(line[line.find('<name>') + 6:line.find('</name>')]))
-                    context = "Coords_Definition"
-            if context == "Coords_Definition":
-                if line.find('<coordinates>') >= 0:
-                    line = line[line.find('<coordinates>') + 13:]
-                    context = "Coordinates"
-            if context == "Coordinates":
-                if line.find('</coordinates>') >= 0:
-                    line = line[:line.find('</coordinates>')]
-                    context = "Folder_Placemark"
-                line = line.strip()
-                line = line.split()
-                for v in line:
-                    v = v.split(',')
-                    muxp_lines.append("    - {} {}\n".format(v[1], v[0]))
-            if context == "Subfolder":
-                if line.find('<name>') >= 0 and line.find('3d_coordinates:') >= 0:
-                    muxp_lines.append("    {}\n".format(line[line.find('<name>') + 6:line.find('</name>')]))
-                    context = "3d_coordinates"
-                    continue  #### assume name for folder is in separat line, no conflict with name of 3d elevation points below
-                if line.find("</Folder>") >= 0:
-                    context = "Folder"
-            if context == "3d_coordinates":  #### expected only Pins wiht elevation in this subfolder, nothing else
-                if line.find('<name>') >= 0:
-                    line = line[line.find('<name>') + 6:line.find('</name>')]
-                    elev_3d = float(line)
-                if line.find('<coordinates>') >= 0:
-                    line = line[line.find('<coordinates>') + 13:line.find('</coordinates>')]
-                    line = line.strip()
-                    v = line.split(',')
-                    muxp_lines.append("    - {} {} {}\n".format(v[1], v[0], elev_3d))
-                if line.find('</Folder>') >= 0:
-                    context = "Folder"  # Subfoler ends here
-
-    muxp_filename = filename
-    if muxp_filename.rfind(".kml") == len(muxp_filename) - 4:  # filename for muxp file ends with '.kml'
-        muxp_filename = muxp_filename[:muxp_filename.rfind(".kml")]  # remove
-    if muxp_filename.rfind(".muxp") != len(muxp_filename) - 5:  # filename for muxp file does not end with '.muxp'
-        muxp_filename += ".muxp"  # add .muxp ending
-
-    return "".join(muxp_lines), muxp_filename
-"""
 
 def kml2muxp(filename):
     """
@@ -414,63 +293,62 @@ def kml2muxp(filename):
 
 def muxp2kml(filename, logname):
     """
-    Converts a muxp file in a kml file for further editing.
-    Edited muxp.kml file can then be read in order to adapt the mesh.
+    Converts a muxp file in a kml string that is returned for further editing.
+    Also the filneame with ending '.kml' is returned.
+    In case of error the kml is None and instead of filename the error is returned.
     """
     muxpdefs, err = readMuxpFile(filename, logname)
     if err is not None:
-        return err
+        return None, err
     error, resultinfo = validate_muxp(muxpdefs, logname)
     if error < 0: # errors above 0 mean that file can still be processed
-        return "Validation of muxp-file failed with error code {} ({})".format(error, resultinfo)
+        return None, "Validation of muxp-file failed with error code {} ({})".format(error, resultinfo)
 
-    filename = fspath(filename) #encode complete filepath as required by os
-    with open(filename + ".kml", "w") as f:
-        f.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-        f.write("<kml xmlns=\"http://www.opengis.net/kml/2.2\" >\n")
-        f.write("<Document>\n\n")
-        head, tail = path.split(filename)
-        f.write("<name>{}.kml</name>".format(tail))
+    filename = fspath(filename + ".kml") #encode complete filepath as required by os
+    kml = []
+    kml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+    kml.append("<kml xmlns=\"http://www.opengis.net/kml/2.2\" >\n")
+    kml.append("<Document>\n\n")
+    head, tail = path.split(filename)
+    kml.append("<name>{}.kml</name>".format(tail))
 
-        f.write("<description>\n")
-        for d in muxpdefs:
-            if d != "area" and d != "commands":
-                f.write("{}: {}\n".format(d, muxpdefs[d]))
-        f.write("</description>\n\n")
+    kml.append("<description>\n")
+    for d in muxpdefs:
+        if d != "area" and d != "commands":
+            kml.append("{}: {}\n".format(d, muxpdefs[d]))
+    kml.append("</description>\n\n")
 
-        f.write("<Style id=\"Area\"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>\n")
-        f.write("<Style id=\"Coords\"><LineStyle><color>ffff00aa</color><width>3</width></LineStyle><PolyStyle><color>40f7ffff</color></PolyStyle></Style>\n\n")
-        f.write("    <Placemark><name>area:</name><styleUrl>#Area</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
-        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
-        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][1]))
-        f.write("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][1]))
-        f.write("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][0]))
-        f.write("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
-        f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
+    kml.append("<Style id=\"Area\"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>\n")
+    kml.append("<Style id=\"Coords\"><LineStyle><color>ffff00aa</color><width>3</width></LineStyle><PolyStyle><color>40f7ffff</color></PolyStyle></Style>\n\n")
+    kml.append("    <Placemark><name>area:</name><styleUrl>#Area</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
+    kml.append("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
+    kml.append("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][1]))
+    kml.append("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][1]))
+    kml.append("        {},{},0\n".format(muxpdefs["area"][3], muxpdefs["area"][0]))
+    kml.append("        {},{},0\n".format(muxpdefs["area"][2], muxpdefs["area"][0]))
+    kml.append("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
 
-        for c in muxpdefs["commands"]:
-            f.write("\n<Folder><name>{}:</name>\n".format(c["_command_info"]))
-            f.write("<description>\n")
-            for k in c:
-                if k != "command" and k != "coordinates" and k != "3d_coordinates" and k != "_command_info":
-                    if c[k] != "" and not (k == "include_raster_square_criteria" and c[k] == "corner_inside") and not (k == "elevation" and c[k] is None):  # Don't include empty / default values
-                    ##### TBD: Make check for default values generic on default definitions #####
-                        f.write("{}: {}\n".format(k, c[k]))
-                    else:
-                        print("Not included Paramter: {} with value: {}".format(k, c[k]))
-            f.write("</description>\n")
-            if "coordinates" in c:
-                f.write("    <Placemark><name>coordinates:</name><styleUrl>#Coords</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
-                for coords in c["coordinates"]:
-                    f.write("        {},{},0\n".format(coords[0], coords[1]))
-                f.write("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
-            if "3d_coordinates" in c:
-                f.write("    <Folder><name>3d_coordinates:</name>\n")
-                for coords in c["3d_coordinates"]:
-                    f.write("        <Placemark><name>{}</name><Point><coordinates>{},{},0</coordinates></Point></Placemark>\n".format(coords[2],coords[1],coords[0]))
-                    #### IMPORTANT: 3d_coordinates are not yet swapped between lat / lon !!!!
-                f.write("   </Folder>\n")
-            f.write("</Folder>\n")
+    for c in muxpdefs["commands"]:
+        kml.append("\n<Folder><name>{}:</name>\n".format(c["_command_info"]))
+        kml.append("<description>\n")
+        for k in c:
+            if k != "command" and k != "coordinates" and k != "3d_coordinates" and k != "_command_info":
+                if c[k] != "" and not (k == "include_raster_square_criteria" and c[k] == "corner_inside") and not (k == "elevation" and c[k] is None):  # Don't include empty / default values
+                ##### TBD: Make check for default values generic on default definitions #####
+                    kml.append("{}: {}\n".format(k, c[k]))
+        kml.append("</description>\n")
+        if "coordinates" in c:
+            kml.append("    <Placemark><name>coordinates:</name><styleUrl>#Coords</styleUrl><Polygon><outerBoundaryIs><LinearRing><coordinates>\n")
+            for coords in c["coordinates"]:
+                kml.append("        {},{},0\n".format(coords[0], coords[1]))
+            kml.append("    </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n")
+        if "3d_coordinates" in c:
+            kml.append("    <Folder><name>3d_coordinates:</name>\n")
+            for coords in c["3d_coordinates"]:
+                kml.append("        <Placemark><name>{}</name><Point><coordinates>{},{},0</coordinates></Point></Placemark>\n".format(coords[2],coords[1],coords[0]))
+                #### IMPORTANT: 3d_coordinates are not yet swapped between lat / lon !!!!
+            kml.append("   </Folder>\n")
+        kml.append("</Folder>\n")
 
-        f.write("</Document></kml>\n")
-    return
+    kml.append("</Document></kml>\n")
+    return "".join(kml), filename

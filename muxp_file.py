@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.6 exp
+# muxp_file.py    Version: 0.2.7 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -171,7 +171,8 @@ def validate_muxp(d, logname):
         for parameter in c:
             log.info("    Validating Paramter {}".format(parameter))
             if parameter in PARAMETER_TYPES:
-                d["commands"][i][parameter] = d["commands"][i][parameter].split()
+                if d["commands"][i][parameter]:  # Prevent case that no value assigned to parameter, probably error
+                    d["commands"][i][parameter] = d["commands"][i][parameter].split()
                 if len(c[parameter]) < len(PARAMETER_TYPES[parameter]):
                     log.error("Command {}: For parameter {} missing value, command {} skipped.".format(i+1, parameter, c["_command_info"]))
                     errors += 1
@@ -402,6 +403,8 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     # Hole definition in boundary are treated the same as a boundary!!!
     # For Bezier nodes of the boundary only the node without Bezier definitions is considered!!!
     # Only land runways (type 100) are considered
+    # Returns the muxp-file as string and the proposed filename for it.
+    # In case of error the string is None and the filename includes error description.
     #
     log = getLogger(logname + "." + __name__)  # logging based on pre-defined logname
     log.info("Reading airport data from: {}".format(filename))
@@ -415,9 +418,10 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     apt_name = None
     lat_min = lon_min = 9999
     lat_max = lon_max = -9999
+    muxp = []  # array of muxp-file lines to be returned as string
     if not path.isfile(filename):
         log.error("Airport File {} does not exist!".format(filename))
-        return "Error: Airport file does not exist!"
+        return None, "Error: Airport file does not exist!"
     with open(filename, encoding="utf8", errors="ignore") as f:
         for line in f:
             v = line.split()
@@ -429,8 +433,8 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
                         Airport = True
                         icao_id = v[4] #set now icao id in case it was '' before
                         apt_elev = round(int(v[1]) * 0.3048)
-                        apt_name = v[5]
-                        if len(v) > 6: apt_name = apt_name + " " + v[6]
+                        apt_name = " ".join(v[5:])
+                        # if len(v) > 6: apt_name = apt_name + " " + v[6:]
                         log.info("Airport {} found with elevation {} m.".format(apt_name, apt_elev))
                     else:
                         Airport = False  # change to false in case of new different airport
@@ -458,7 +462,7 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
                         log.info("Boundary no. {} with {} vertices read.".format(len(bounds), len(bounds[-1])))
     if len(bounds) == 0 and len(runways) == 0:
         log.error("No valid boundary or runway found in file!")
-        return "Error: No valid boundary or runway found in file!"
+        return None, "Error: No valid boundary or runway found in file!"
     for b in range(len(bounds)):
         for v in range(len(bounds[b])):
             if bounds[b][v][1] < lat_min: lat_min = bounds[b][v][1]
@@ -467,55 +471,96 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
             if bounds[b][v][0] > lon_max: lon_max = bounds[b][v][0]
 
     muxp_filename = muxpfolder + "/automuxed_airport_" + icao_id + ".muxp"
-    if path.isfile(muxp_filename):
-        log.warning("MUXP-file {} already exists! Copy previous file to {}".format(muxp_filename, muxp_filename+".bak"))
-        replace(muxp_filename, muxp_filename+".bak")
-    log.info("Writing for mesh type: {}  muxp-file: {}".format(meshtype, muxp_filename))
-    with open(muxp_filename, "w", encoding="utf8", errors="ignore") as f:
-        f.write("muxp_version: 0.1\n")
-        f.write("id: airport_{}\n".format(icao_id))
-        f.write("version: 1.0\n")
+    log.info("Creating for mesh type: {}  muxp-string for file: {}".format(meshtype, muxp_filename))
+
+    muxp.append("muxp_version: 0.1\n")
+    muxp.append("id: airport_{}\n".format(icao_id))
+    muxp.append("version: 1.0\n")
+    if meshtype == "TIN":
+        muxp.append("description: creating TIN for {}\n".format(apt_name))
+    elif meshtype == "flatten":
+        muxp.append("description: flattening of {}\n".format(apt_name))
+    else:
+        log.error("Creation of muxp file for undefined meshtype {} not possible!".format(meshtype))
+        return None, "Undefined mesh type requested!"
+    muxp.append("author: muxp_auto_creation_from_apt.dat\n")
+    tile_lat = "{0:+03d}".format(floor(lat_min))
+    tile_lon = "{0:+04d}".format(floor(lon_min))
+    muxp.append("tile: {}{}\n".format(tile_lat, tile_lon))
+    muxp.append("area: {} {} {} {}\n".format(lat_min-0.0001, lat_max+0.0001, lon_min-0.0001, lon_max+0.0001))
+
+    for n, r in enumerate(runways):
+        muxp.append("\n")
         if meshtype == "TIN":
-            f.write("description: creating TIN for {}\n".format(apt_name))
-        elif meshtype == "flatten":
-            f.write("description: flattening of {}\n".format(apt_name))
+            rwy_vec = ((r[1][0] - r[0][0])/3, (r[1][1] - r[0][1])/3)  # vector for 1/3rd of rwy
+            muxp.append("cut_spline_segment.runway_{}:\n".format(n))
+            muxp.append("   width: {}\n".format(r[2]))
+            muxp.append("   profile_interval: 50\n   terrain: lib/g10/terrain10/crp_wrm_sdry.ter\n")
+            muxp.append("   3d_coordinates:\n")
+            muxp.append("   - {} {} -32768\n".format(r[0][0], r[0][1]))
+            muxp.append("   - {} {} -32768\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
+            muxp.append("   - {} {} -32768\n".format(r[0][0] + 2 * rwy_vec[0], r[0][1] + 2 * rwy_vec[1]))
+            muxp.append("   - {} {} -32768\n".format(r[1][0], r[1][1]))
+        else:  # flatten
+            muxp.append("cut_polygon.runway_{}:\n".format(n))
+            muxp.append("   elevation: {}\n".format(apt_elev))
+            muxp.append("   coordinates:\n")
+            for v in segmentToBox(r[0], r[1], r[2]):
+                muxp.append("   - {} {}\n".format(v[1], v[0]))
+
+    for n, b in enumerate(bounds):
+        muxp.append("\n")
+        if meshtype == "TIN":
+            muxp.append("limit_edges.{}:\n".format(bound_names[n]))
+            muxp.append("   edge_limit: 100\n")
+        else: #  flatten
+            muxp.append("cut_polygon.{}:\n".format(bound_names[n]))
+            muxp.append("   elevation: {}\n".format(apt_elev))
+        muxp.append("   coordinates:\n")
+        for v in b:
+            muxp.append("   - {} {}\n".format(v[1], v[0]))
+
+    return "".join(muxp), muxp_filename
+
+
+def unflatten_apt(filename, icao_id, logname):
+    """
+    Checks for filename with apt.dat whether flatten flag for airport with icao-id is set.
+    Returns the flag (or negative error code) and the apt.dat file as string
+    where an existing flattening definition is put as comment.
+    """
+    log = getLogger(logname + "." + __name__)  # logging based on pre-defined logname
+    log.info("Checking if airport: {} in: {} has flatten-flag set.".format(icao_id, filename))
+    Airport = False  # else first the correct icoa id has to be found before Airport becomes true
+    apt = []  # array with apt lines to be returned
+    flatten_flag = 0  # Flag to be returned; 1 when it was set
+    try:
+        with open(filename, "r", encoding="utf8", errors="ignore") as f:
+            lines = f.readlines()
+    except TypeError: #### WRONG ERROR ####
+        log.error("apt-file {} not readable!".format(filename))
+        return -1, "apt-file not readable"
+
+    for line in lines:
+        v = line.split()
+        if len(v) > 4:  # check if correct airport section in file is reached
+            if v[0] == '1' or v[0] == '16' or v[0] == '17':
+                if v[4] == icao_id or icao_id =='': #if no icao id is given just first airport is selected
+                    Airport = True
+                    icao_id = v[4]  # set now icao id in case it was '' before
+                    apt_name = " ".join(v[5])
+                    log.info("Airport {} found where flattened shall be removed.".format(apt_name))
+                else:
+                    Airport = False  # change to false in case of new different airport
+        if len(v) > 2 and Airport and v[0] == '1302' and v[1] == 'flatten':
+                log.info("Line with flatten flag found: {}".format(line))
+                if v[2].strip() == "1":  # Flatten Flag set
+                    apt.append("# 1302 flatten 1  # removed flattening by MUXP\n")
+                    flatten_flag = 1
+                else:  # Flatten flag was not set to 1, so leave line
+                    apt.append(line)
         else:
-            log.error("Creation of muxp file for undefined meshtype {} not possible!".format(meshtype))
-            return "Undefined mesh type requested!"
-        f.write("author: muxp_auto_creation_from_apt.dat\n")
-        tile_lat = "{0:+03d}".format(floor(lat_min))
-        tile_lon = "{0:+04d}".format(floor(lon_min))
-        f.write("tile: {}{}\n".format(tile_lat, tile_lon))
-        f.write("area: {} {} {} {}\n".format(lat_min-0.0001, lat_max+0.0001, lon_min-0.0001, lon_max+0.0001))
+            apt.append(line)
 
-        for n, r in enumerate(runways):
-            f.write("\n")
-            if meshtype == "TIN":
-                rwy_vec = ((r[1][0] - r[0][0])/3, (r[1][1] - r[0][1])/3)  # vector for 1/3rd of rwy
-                f.write("cut_spline_segment.runway_{}:\n".format(n))
-                f.write("   width: {}\n".format(r[2]))
-                f.write("   profile_interval: 50\n   terrain: lib/g10/terrain10/crp_wrm_sdry.ter\n")
-                f.write("   3d_coordinates:\n")
-                f.write("   - {} {} -32768\n".format(r[0][0], r[0][1]))
-                f.write("   - {} {} -32768\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
-                f.write("   - {} {} -32768\n".format(r[0][0] + 2 * rwy_vec[0], r[0][1] + 2 * rwy_vec[1]))
-                f.write("   - {} {} -32768\n".format(r[1][0], r[1][1]))
-            else:  # flatten
-                f.write("cut_polygon.runway_{}:\n".format(n))
-                f.write("   elevation: {}\n".format(apt_elev))
-                f.write("   coordinates:\n")
-                for v in segmentToBox(r[0], r[1], r[2]):
-                    f.write("   - {} {}\n".format(v[1], v[0]))
+    return flatten_flag, "".join(apt)
 
-        for n, b in enumerate(bounds):
-            f.write("\n")
-            if meshtype == "TIN":
-                f.write("limit_edges.{}:\n".format(bound_names[n]))
-                f.write("   edge_limit: 100\n")
-            else: #  flatten
-                f.write("cut_polygon.{}:\n".format(bound_names[n]))
-                f.write("   elevation: {}\n".format(apt_elev))
-            f.write("   coordinates:\n")
-            for v in b:
-                f.write("   - {} {}\n".format(v[1], v[0]))
-    return "File {} written".format(muxp_filename)

@@ -17,6 +17,7 @@ MUXP_COMMANDS = (
     "extract_mesh_to_file",
     "insert_mesh_from_file",
     "exit_without_update",
+    "unflatten_default_apt",
 )
 
 MUXP_PARAMS = (
@@ -40,7 +41,8 @@ MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],
                            "update_elevation_in_poly": ["coordinates"],  # optionally either set flat by elevation or ramp by 3 3d_cooridinates
                            "extract_mesh_to_file": ["coordinates"],
                            "insert_mesh_from_file": ["coordinates", "terrain"],
-                           "exit_without_update": []}
+                           "exit_without_update": [],
+                           "unflatten_default_apt": ["name"]}
 
 PARAMETER_TYPES = {"command": ["string"],  # this is just command-type
                    "_command_info": ["string"],  # added below, includes full command including added info after '.' like cut_polygon.inner
