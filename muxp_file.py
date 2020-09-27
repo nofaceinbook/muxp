@@ -434,7 +434,6 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
                         icao_id = v[4] #set now icao id in case it was '' before
                         apt_elev = round(int(v[1]) * 0.3048)
                         apt_name = " ".join(v[5:])
-                        # if len(v) > 6: apt_name = apt_name + " " + v[6:]
                         log.info("Airport {} found with elevation {} m.".format(apt_name, apt_elev))
                     else:
                         Airport = False  # change to false in case of new different airport
@@ -519,6 +518,10 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
         muxp.append("   coordinates:\n")
         for v in b:
             muxp.append("   - {} {}\n".format(v[1], v[0]))
+
+    if apt_flatten:  # flatten_flag set
+        muxp.append("\nunflatten_default_apt:\n")
+        muxp.append("   name: {}".format(icao_id))
 
     return "".join(muxp), muxp_filename
 
