@@ -54,7 +54,7 @@ class MUXP(object):
 
             commands = k.split('.')
 
-            if commands[0] in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', ):
+            if commands[0] in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf'):
                 ##### TBD: HAVE THIS META-DATA GLOBALLY DEFINED ###############
                 wed.add_meta(object_name=f"{k}:{v}")
 
@@ -258,7 +258,7 @@ class MUXP(object):
                 if o['hierarchy']['@hidden'] == '0':
                     self.muxp_yaml[wed_command] = self.wed_collect_command(o)
 
-        # for command in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', ):
+        # for command in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf' ):
         #     o = g.get_object()
 
         y = yaml.dump(

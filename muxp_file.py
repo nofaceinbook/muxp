@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.7 exp
+# muxp_file.py    Version: 0.2.8 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -268,7 +268,7 @@ def findDSFmeshFiles(tile, xpfolder, logname):
     It searches in the X-Plane folder in Custom and Global Scenery.
     The key of the dict is the path from xpfolder to the scenery pack and
     then value is type of ACTIVE (topmost in scenery_packs.ini), PACK, DEFAULT,
-    DISABLED, NEW (not in scenery_paxcks.ini yet).
+    DISABLED, NEW (not in scenery_packs.ini yet).
     """
     log = getLogger(logname + "." + __name__)  # logging based on pre-defined logname
     inifile = xpfolder + "/Custom Scenery/scenery_packs.ini"
@@ -344,6 +344,35 @@ def findDSFmeshFiles(tile, xpfolder, logname):
                 
     
     return sorted_packs
+
+
+def find_preferred_pack(preferred, available):
+    """
+    Function returns the first scenery pack that is in preferred packs which is also in available packs.
+    preferred is the string behind source_dsf: in muxp file and available is the dictionary of available dsf packs.
+    Returns None in case no match was found.
+    """
+    if len(preferred) == 0:
+        return None
+    preferred = preferred.split()
+    for p in preferred:
+        if p == "DEFAULT":
+            return "Global Scenery/X-Plane 11 Global Scenery"  #### TBD: Define this string globally!!!"
+        p_type, p_value = p.split('=')
+        if p_type == "pack":
+            p_value = p_value.replace('%', ' ')  # whitespace was written as '%' and is now converted back
+            if p_value[0] == "*":
+                p_value = p_value[1:]
+                for a in available.keys():
+                    if a.find(p_value) >= 0:
+                        return a
+            else:
+                if p_value in available.keys():
+                    return p_value
+        ######### TBD: if p_type cases for hash=x76h.... or agent=LR... #####################
+    return None  # No match found so far
+
+
 
 def getMUXPdefs(props):
     """
@@ -487,6 +516,7 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     tile_lon = "{0:+04d}".format(floor(lon_min))
     muxp.append("tile: {}{}\n".format(tile_lat, tile_lon))
     muxp.append("area: {} {} {} {}\n".format(lat_min-0.0001, lat_max+0.0001, lon_min-0.0001, lon_max+0.0001))
+    muxp.append("source_dsf: DEFAULT\n")
 
     for n, r in enumerate(runways):
         muxp.append("\n")

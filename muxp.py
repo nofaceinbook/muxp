@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.7 exp"
+muxp_VERSION = "0.2.8 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -29,11 +29,13 @@ from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
 from wed_conv import MUXP
-from os import path, remove, mkdir, sep, replace
+from os import path, remove, mkdir, sep, replace, walk
 from shutil import copy2
+
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
-from sys import argv, exit #### exit just for testing !!!####
+from sys import argv, exit
+from glob import glob
 
 
 
@@ -91,7 +93,7 @@ def defineLog(logname, logLevelStream='INFO', logLevelFile='INFO', mode='w+'):
    
 
 class muxpGUI:
-    def __init__(self, rf, muxpfile=None):
+    def __init__(self, rf, muxpfiles=[]):
         self.runfile = rf
         self.configversion = None
         self.xpfolder = ""
@@ -106,7 +108,7 @@ class muxpGUI:
         self.dsf = XPLNEDSF(LogName, self.showProgress)  # includes all information about the read dsf-file
         self.dsf_sceneryPack = "" #Name of the scenery Pack of dsf file to be processed
         self.conflictStrategy = "" #Strategy how to handle conflict with already existing updates in dsf-file
-        self.activatePack = 0 #set to 1/True if after writing of updated dsf file it shall be ensured that scenery is activated in scenery_Packs.ini
+        self.activatePack = 1 #set to 1/True if after writing of updated dsf file user is queried to directly activate pack in scenery_Packs.ini
 
         self.button_selected = None  # keeps track of selected button in GUI
 
@@ -136,9 +138,9 @@ class muxpGUI:
         self.muxp_undo.grid(row=9, column=2, sticky=E, pady=4)        
         log.info("GUI is set up.")
         
-        if muxpfile != None: #if muxpfile was given, select it in field
-            self.select_muxpfile(self.muxpfile_entry, muxpfile)
-        
+
+
+        self.createConfig()  # creates a Config File if none is present
         error = self.getConfig()
         if error: #in case of config error, config has to be defined
             displayNote(self.window, "Configuration file 'muxp.config' not found (check muxp.log) or\nyou are starting muxp the first time.\n\n" +
@@ -149,10 +151,72 @@ class muxpGUI:
                                      "IMPORTANT: This tool is in an early development stage.\n                       All you are doing, you do it at your own risk!")
             self.ConfigMenu()
         else:
-            if muxpfile != None: #if muxpfile was given
-                error = self.runMuxp(muxpfile) #directly run muxpfile if it was given as argument
-        if muxpfile == None or error: #program that was run directly, terminates directly in case of no errors
+            if muxpfiles != []: #if muxpfiles given
+                for mf in muxpfiles:
+                    self.select_muxpfile(self.muxpfile_entry, mf)
+                    error = self.runMuxp(mf)  # directly run muxpfile if it was given as argument
+                    if error: break ### TBD: Better have all errors on one list to show
+            #else: #OPTION TO DIRECTLY RUN NEW MUXP-FILES IN DIRECTORY; MAY BE TOO MANY OPTIONS ....
+            #    self.handle_new_muxp_files()  # in case of new muxpfiles directly process them
+        if muxpfiles == [] or error: #program that was run directly, terminates directly in case of no errors
             mainloop()
+
+    def handle_new_muxp_files(self):
+        """
+        Will show all new muxp files (newer than muxp.config) to be directly processed.
+        WARNING: Function not finished and currently not used as these might be to many options for user
+           ---> Probably to be removed
+        """
+        def process_new_muxes(box, mlist):
+            ids = box.curselection()
+            if len(ids) == 0:
+                selected_muxes = range(len(mlist))
+            else:
+                selected_muxes = box.get(ids)
+            ### PROCESS SELECTED IDs ####
+            ### Set modification time to time of processed file (not process again)
+            self.button_selected = "OK"
+
+        ###### TBD: ONLY handle new MUXP-files if not forbidden by config #####################
+        muxp_conf = self.runfile[:self.runfile.rfind('.')]+'.config'
+        new_date = path.getmtime(muxp_conf)
+        log.info("Searching new .muxp files in MUXP-folder: {}  (incl. subfolders)".format(self.muxpfolder))
+        muxp_files = glob(self.muxpfolder + '/**/*.muxp', recursive=True)  # all files ending .muxp incl. sub-folders
+        new_files = [f for f in muxp_files if path.getmtime(f) > new_date]
+        muxp_list = []
+        for f in new_files:
+            fsep = f.replace(sep, "/")
+            fshort = fsep[len(self.muxpfolder)+1:]  # +1 to get rid of separator
+            muxp_list.append([fsep, path.getmtime(f), fshort])
+        self.window.withdraw()  # hide main-window for this simple-processing
+        self.button_selected = None   # set to empty, as this is variable needs value for window to be closed
+        new_muxes_win = Toplevel(self.window)
+        new_muxes_win.attributes("-topmost", True)
+        topinfo = Label(new_muxes_win, text="New MUXP Files to be processed:")
+        topinfo.grid(row=0, column=0)
+        listbox = Listbox(new_muxes_win, selectmode = "multiple", width=80)
+        listbox.grid(row=1, column=0, columnspan=3)
+        for item in muxp_list:
+            listbox.insert(END, item[2])
+        buttoninfo = Label(new_muxes_win, text="Press OK to process these new muxp-files and update your mesh.\n"
+                                               "You could also select just individual files to be processed.")
+        buttoninfo.grid(row=2, column=0, columnspan=3)
+        ok_button = Button(new_muxes_win, text='  OK  ', command=lambda: process_new_muxes(listbox, muxp_list))
+        ok_button.grid(row=3, column=0)
+        exit_button = Button(new_muxes_win, text='  EXIT  ', command=lambda: exit(0)) ### DOES NOT WORK --> FIRST CALL process_.. set button to "EXIT" and then exit at end of fucntion
+        exit_button.grid(row=3, column=2)
+        skip_button = Button(new_muxes_win, text='  skip for advanced processing  ', command=lambda: process_new_muxes(listbox, muxp_list))
+        skip_button.grid(row=3, column=1)
+        while self.button_selected == None: #wait until selection is done
+            new_muxes_win.update()
+        new_muxes_win.destroy()
+        self.window.update()
+        self.window.deiconify()  # show now up muxp main window, update required first
+        self.button_selected = None
+
+
+
+
 
 
     def getConfig(self):
@@ -237,6 +301,33 @@ class muxpGUI:
         else:
             self.activatePack = 0
         return 0 #no error
+
+
+    def createConfig(self):
+        """
+        Would save a default MUXP config file in case no such file is present and
+        MUXP is started from a directory under the XP 11 Custom Scenery Folder.
+        Returns 0 if config exists, 1 if created, -1 if it cannot be created.
+        """
+        filename = self.runfile[:self.runfile.rfind('.')] + '.config'
+        if path.isfile((filename)):
+            log.info("MUXP Configuration file: {} exits.".format(filename))
+            return 0
+
+        head, tail = path.split(path.abspath(path.dirname(self.runfile)))
+        while len(tail) > 0:
+            if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
+                self.xpfolder = head.replace(sep, '/')  # setting for all OS the correct separators in filename
+                self.muxpfolder = path.abspath(path.dirname(self.runfile))
+                self.muxpfolder = self.muxpfolder.replace(sep, '/')  # setting for all OS the correct folder separators
+                log.info("Set X-Plane folder to: {}".format(self.xpfolder))
+                log.info("Set MUXP-Folder to: {}".format(self.muxpfolder))
+                self.safeConfig(self.xpfolder, self.muxpfolder, 0, 1, "", "ORIGINAL")
+                return 1
+            head, tail = path.split(head)
+            if len(tail) == 0:
+                log.info("Not inside X-Plane folder so MUXP Config has to be created manually.")
+                return -1
 
         
     def showProgress(self, percentage):
@@ -355,7 +446,7 @@ class muxpGUI:
         with open(inifile, "w", encoding="utf8", errors="ignore") as f:
             for line in new_infile:
                 f.write(line)
-        return 0 #no error       
+        return 0  # no error
 
     def ConfigMenu(self):
         def select_file(entry): #if file is set it is directly displayed
@@ -443,7 +534,7 @@ class muxpGUI:
     def SelectDSF(self, scenery_packs):
         """
         Shows windows with all sceneries in scenery_packs dict
-        and waits until usere has selected on scenery in listbox.
+        and waits until user has selected one scenery in listbox.
         Selected scenery is stored in self.dsf_sceneryPack (relative to xp_folder).
         """
         def done(scenlist, infolabel):
@@ -454,6 +545,8 @@ class muxpGUI:
                 selected_secenery = scenlist.get(ids)
                 selected_secenery = selected_secenery[selected_secenery.find(":")+2:]
                 self.dsf_sceneryPack = selected_secenery
+
+        self.dsf_sceneryPack = ""   # set to empty, as this is variable needs value for window to be closed
         selectDSFwin = Toplevel(self.window)
         selectDSFwin.attributes("-topmost", True)
         topinfo = Label(selectDSFwin, text="Select DSF File to update:")
@@ -753,13 +846,24 @@ class muxpGUI:
         log.info("muxpfile {} with id: {} version: {} for area:{} with {} commands read.".format(update["filename"], update["id"], update["version"], update["area"], len(update["commands"])))
         
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
-        scenery_packs = None # dictionary of scenery packs for according tiles
+        scenery_packs = None  # dictionary of scenery packs for according tiles
+        log.info("source_dsf in muxp-file: {}".format(update["source_dsf"]))
+        if update["source_dsf"].find("DEFAULT") == 0:  # skip searches when DEFAULT mesh is first preferred in MUXP file
+            self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery"  #### TBD: Define this string globally!!!
+            log.info("MUXP file asks to use DEFAULT scenery, so updating: {}".format(self.dsf_sceneryPack))
+
         if len(self.dsf_sceneryPack) == 0:  # no scenery pack yet defined (e.g. via config file)
             self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
             self.muxp_start.config(state="disabled")
             self.window.update()
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
-            self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
+            preferred_pack = find_preferred_pack(update["source_dsf"], scenery_packs)
+            if not preferred_pack:
+                log.info("None of the preferred packs: {}  in muxp-file found.".format(update["source_dsf"]))
+                self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
+            else:
+                log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
+                self.dsf_sceneryPack = preferred_pack
         elif self.dsf_sceneryPack == "[ACTIVE]":
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             for sp in scenery_packs.keys():
@@ -872,8 +976,19 @@ class muxpGUI:
                 for scen in scenery_packs:
                     if scenery_packs[scen] in ["ACTIVE", "PACK"]:
                         before_packs.append(scen)
-                log.info("Updateing scnery_packs.ini and inserting new pack {} before {} in order that this scenery will be activated in X-Plane".format(newSceneryPack, before_packs))
-                self.activateSceneryPack(newSceneryPack, before_packs)
+                selection = self.warn_window("The scenery package {}\n".format(newSceneryPack) +
+                                 "is currently not activated in scenery_packs.ini\n" +
+                                 "In order to see the changes by MUXP this ini-file needs\n" +
+                                 "to be updated by placing the package in the ini-file\n" +
+                                 "before: {}\n\n".format(before_packs) +
+                                 "By pressing OK MUXP will activate the update for you,\n" +
+                                 "by pressing CANCEL you have to activate on your own.\n\n")
+
+                if selection == "OK":
+                    log.info("Updateing scenery_packs.ini and inserting new pack {} before {} in order that this scenery will be activated in X-Plane".format(newSceneryPack, before_packs))
+                    self.activateSceneryPack(newSceneryPack, before_packs)
+                else:
+                    log.info("Decsion to update scenery_packs.ini manually.")
 
         showRunResult("Finished Mesh Update {} successful".format(path.basename(filename)), "Scenery Pack {} adapted.".format(self.dsf_sceneryPack))
         return 0 #processed muxp without error    
@@ -1200,10 +1315,18 @@ class muxpGUI:
 ########### MAIN #############
 log = defineLog('muxp', 'INFO', 'INFO')  # no log on console for EXE version --> set first INFO to None
 log.info("Started muxp Version: {}".format(muxp_VERSION))
-runfile = argv[0].replace(sep, '/')  # setting for all OS the correct separators in filename
-if len(argv) > 1:
-    muxpfile = argv[1].replace(sep, '/')  # setting for all OS the correct separators in filename
-else:
-    muxpfile = None
-main = muxpGUI(runfile, muxpfile)
+
+muxpfiles = []
+for i in range(len(argv)):
+    f = argv[i].replace(sep, '/')   # setting for all OS the correct separators in filename
+    if path.isfile(f):
+        muxpfiles.append(f)
+    if path.isdir(f):  # in case of directories include all files in it (not going down to sub-directories)
+        for (_, _, filenames) in walk(f):
+            filenames = [f + '/' + fn for fn in filenames]  # write directory befor filename to get full path
+            muxpfiles.extend(filenames)
+            break
+
+log.info("MUXP runfile: {} \n   processing following files: {}".format(muxpfiles[0], muxpfiles[1:]))
+main = muxpGUI(muxpfiles[0], muxpfiles[1:])  # first element in muxpfiles is argv[0], the runfile
 

@@ -2,7 +2,7 @@ SUPPORTED_MUXP_FILE_VERSION = 0.1
 
 MUST_BASE_VALUES = ["muxp_version", "id", "area", "tile", "commands"]  # These values must be all present in muxp files
 
-OPTIONAL_BASE_VALUES = ["description", "author"]  # only strings are allowed optional
+OPTIONAL_BASE_VALUES = ["description", "author", "source_dsf"]  # only strings are allowed optional
 
 MUXP_COMMANDS = (
     "cut_polygon",
