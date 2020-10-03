@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.8 exp"
+muxp_VERSION = "0.2.8a exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -565,7 +565,7 @@ class muxpGUI:
             selectDSFwin.update()
         selectDSFwin.destroy()
 
-        
+
     def handleMUXPconflicts(self, filename, update):
         """
         Checks if there are conflicts for the dsf file like overlapping
@@ -601,7 +601,23 @@ class muxpGUI:
             else:
                 issues[i] = "File does not exist!"
             log.info("    issue: {}  muxp-properties: {}".format(issues[i], muxes[i]))
-            if i==0 and issues[0] == "None": return filename #in case of no issues of current file nothing to do, just stay with current file to be updated
+
+        if issues[0] == "None":
+            # in case of no issues of current file nothing to do, just stay with current file to be updated
+            self.conflictStrategy = "CURRENT"
+            return filename
+        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and updateAlreadyInProps(update['id'], props[0]):
+            ########## TBD: check that version to be installed is not older than current !!!! ###################
+            # in case of no issues with original and the current file only includes the update, it can be overwritten
+            self.conflictStrategy = "ORIGINAL"
+            return filenames[2]
+        if issues[1] == "None":
+            # in case that backup-file has no issues, then just update this one
+            # disadvantage when using backup-file is that, the current file will not be back-upped
+            #   --> backup stays in order to be able to test again and again new updates starting always from backup
+            self.conflictStrategy = "BACKUP"
+            return filenames[1]
+
         conflictwin = Toplevel(self.window)
         conflictwin.attributes("-topmost", True)
         topinfo = Label(conflictwin, anchor='w', justify=LEFT, text="The DSF file you want to update was already updated in a way that may conflict witht current update.\n"
@@ -633,8 +649,8 @@ class muxpGUI:
                 scenerybutton[i].config(bg='green')
 
         buttoninfo = Label(conflictwin, text="Select which dsf file you want to update or press Cancel.\n"
-                                             "Note: Original dsf will never be overwritten, but current is OVERWRITTEN with new version.\n"
-                                             "      When selecting original dsf all previous mesh updates will be lost and would need to be applied again!")
+                                             "Note: ORIGINAL DSF FILE will never be overwritten, but current is OVERWRITTEN with new version.\n"
+                                             "WARNING: When selecting ORIGINAL DSF FILE all previous mesh updates in CURRENT DSF FILE  will be lost and would need to be applied again!")
         buttoninfo.grid(row=8, column=0, columnspan=3)
         cancelbutton = Button(conflictwin, text='  CANCEL  ', command = lambda: done("CANCEL")) 
         cancelbutton.grid(row=9, column=1)
@@ -938,7 +954,10 @@ class muxpGUI:
         self.current_action = "write"
         
         ################ CREATE BACKUP FROM CURRENT DSF BEFORE WRITING #################
-        if path.exists(dsf_output_filename): #only make backup if file exists
+        if path.exists(dsf_output_filename) and self.conflictStrategy != "BACKUP":
+            # only make backup if existing dsf-file will be overwritten and not if the backup-file is the source
+            #   in that case, the backup-file should be kept in order to be able to test the latest update again
+            #   and again without starting from scratch. HOWEVER: a previous current file will be LOST
             copy2(dsf_output_filename, dsf_output_filename+".muxp.backup")
         
         ############## CHECK WRITE LOCATION AND WRITE UPDATED DSF FILE ##################
