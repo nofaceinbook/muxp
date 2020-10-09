@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.2.3 exp
+# muxp_area.py    Version: 0.2.9 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -292,7 +292,8 @@ class muxpArea:
         """
         # When searching closest point this must be selected from vertices on the edge cut and not any point of p
         ############ TBD: The first value compared to is ACCURACY --> SHOULD BE DEFINED FLEXIBLE WITH COMMANDS #######
-        ACCURACY = 1
+        # In case cutting polygon has closer edges/vertics than accuracy this could lead to errors in the mesh
+        ACCURACY = 0.3
         if distance(border_v[0], p[entry_segment]) < ACCURACY and distance(border_v[0], p[entry_segment]) < distance(border_v[0], p[(entry_segment+1)%len(p)]):
             close_entry_point = deepcopy(p[entry_segment])
         elif distance(border_v[0], p[(entry_segment+1)%len(p)]) < ACCURACY and distance(border_v[0], p[(entry_segment+1)%len(p)]) < distance(border_v[0], p[entry_segment]):
@@ -302,15 +303,14 @@ class muxpArea:
         elif distance(border_v[-1], p[(exit_segment+1)%len(p)]) < ACCURACY and distance(border_v[-1], p[(exit_segment+1)%len(p)]) < distance(border_v[-1], p[exit_segment]):
             close_exit_point = deepcopy(p[(exit_segment+1)%len(p)])
         if close_entry_point and close_exit_point and entry_segment == exit_segment and distance(close_entry_point, close_exit_point) < ACCURACY:
-            self.log.info("PolyCutPoly cuts same edge closer to vertices than accuracy. CUt is not performed and cutting vertices like {} inside that poly vanish.".format(p[i]))
+            self.log.info("PolyCutPoly cuts same edge closer to vertices than accuracy. CUt is not performed and cutting vertices like {} inside that poly vanish.".format(c[i]))
             inner = []
-            outer = p
-
+            outer = deepcopy(p)
 
         # Now replace in outer and inner polys of p (after cut) the close vertices if they exist
         for old, new in [(border_v[0], close_entry_point), (border_v[-1], close_exit_point)]:
             if not new: continue  # if there is no closer point, then nothing to do
-            self.log.info("Close Cut: Replacing {} with {}".format(old, new))  #### TESTING ONLY #####
+            self.log.info("Close Cut: Replacing {} with {} in outer-poly: {} and inner-poly: {}".format(old, new, outer, inner))  #### TESTING ONLY #####
             outer = self.replace_vertex_in_poly(old, new, outer)  # replace entry point by point of p
             inner = self.replace_vertex_in_poly(old, new, inner)
             # self.log.info("    polygon after replacement: {}".format(inner))  #### TESTING ONLY #####
@@ -355,7 +355,7 @@ class muxpArea:
 
 
     def CutPoly(self, p, elev=None, keepInnerTrias=True):
-        #################### TBD: Must p be closed (first = last vertex in list) or not. Seems some functions below have different assumptions. ####################
+        #################### P MUST be closed (first = last vertex in list) ### TBD: Idea was also to be able cutting al line ####################
         outer = []
         inner = []
         border = []
