@@ -44,6 +44,16 @@ def intersection(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects 
     else:                    
         return None   ######### Removed () around none on 12.04.2020
 
+def intersectionCL(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects segement from p3 to p4   ### NEW - taken from bflat ###
+    #### same as intersection but returns special value in case both segments are collinear
+    s0, t0 = _linsolve_(p2[0] - p1[0], p3[0] - p4[0], p3[0] - p1[0], p2[1] - p1[1], p3[1] - p4[1], p3[1] - p1[1])
+    if s0 == -99999: return "Collinear"
+    if s0 >= 0 and s0 <= 1 and t0 >= 0 and t0 <= 1:
+        return (round((p1[0] + s0 * (p2[0] - p1[0])), 8), round(p1[1] + s0 * (p2[1] - p1[1]), 8))  ### returns the cutting point as tuple; ROUNDING TO ALWAYS GET SAME POINT
+    else:
+        return None   ######### Removed () around none on 12.04.2020
+
+
 def lat2y(a):
     RADIUS = 6378137.0  # in meters on the equator
     return log(tan(pi / 4 + radians(a) / 2)) * RADIUS
@@ -93,12 +103,12 @@ def sortPointsAlongPoly(points, poly, epsilon=0.001):
             edist, odist, dist = edgeDistance(p, poly[i], poly[i+1])
             #print("Check point {} for edge {} results in odist {} and distance {}".format(p, i, odist, edist))
             if odist < epsilon and edist >= -epsilon and edist <= 1 + epsilon:
-                print("    added to list")
+                #print("    added to list")
                 sortedPoints.append([i, edist, p[0], p[1]])
                 break
             if i == len(poly) - 2:  # we did not find an edge for p
                 log_info += "ERROR: point {} not on edge of poly {}\n".format(p, poly)
-                return None
+                return None, log_info
     sortedPoints.sort()  # okay now they are sorted as required
     for i in range(len(sortedPoints)):
         log_info += "Info: Point {} on edge no {} starting at {} with part {}\n".format(sortedPoints[i][2:], sortedPoints[i][0], poly[sortedPoints[i][0]], sortedPoints[i][1])

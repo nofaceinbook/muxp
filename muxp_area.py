@@ -100,10 +100,26 @@ class muxpArea:
         no vertex on same coordinates with different elevation ....
         """
         for nt, t in enumerate(self.atrias):
+            # Checking all trias are clockwise
             if not IsClockwise([t[0][:2], t[1][:2], t[2][:2]]):
                 self.log.warning("Tria {} is anticlockwise and will be set to clockwise now.".format(t))
                 self.atrias[nt][0], self.atrias[nt][2] = self.atrias[nt][2],  self.atrias[nt][0]
-                #### tbd to change tria
+        # Checking different elevations for same coords
+        ############## TBD: SHOULD THIS NOT BE DONE WHEN MATCHING THEM FOR CONVERSION TO DSF #####################
+        different_elevations = 0  # assume no differences exist
+        cdict = {}  # set up dictionary with all coords, value is elevation
+        for nt, t in enumerate(self.atrias):
+            for nv, v in enumerate(t[:3]):
+                if (round(v[0], 7), round(v[1], 7)) in cdict:
+                    if v[2] != cdict[(round(v[0], 7), round(v[1], 7))]:  # different elevation
+                        self.atrias[nt][nv][2] = cdict[(round(v[0], 7), round(v[1], 7))]  # update elevation of new found to value of first found
+                        different_elevations += 1
+                else:
+                    cdict[(round(v[0], 7), round(v[1], 7))] = v[2]  # set elevation for these coordinates
+        if different_elevations:
+            self.log.warning("{} DIFFERING ELEVATIONS at vertices found; updated to first found values".format(different_elevations))
+            #### tbd to set always on the same value in area, e.g. always highest found  ####
+
         ##### to be continued ##############
         ###### OPEN: Check not atrias but really trias in dsf are correct? But then this has to be final step after creating dsfVertices and insertion in dsf ##########
 
@@ -123,7 +139,24 @@ class muxpArea:
                     vertices.append(v)  # add tuple of vertex at coords to make sure to get all vertices at the coords
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
         return vertices    #returns set of all vertices which ar on coords
-    
+
+
+    def replace_vertex_in_poly(self, oldv, newv, poly):
+        """
+        Replaces in list of vertices in poly all vertices (x,y) that match oldv with newv.
+        In case newv was already in the list, this occurrence is left out. Updated poly is returned.
+        """
+        replaced = False
+        new_poly = []
+        for v in poly:
+            if v[0] == oldv[0] and v[1] == oldv[1] and not replaced:
+                new_poly.append(newv)
+                replaced = True
+            elif v[0] != newv[0] or v[1] != newv[1]:
+                new_poly.append(v)
+        return new_poly
+
+
     def PolyCutPoly(self, p, c, c_start=0, c_start_distance=0):
         """
         This function cuts polygon p with cutting poly c.
@@ -137,6 +170,7 @@ class muxpArea:
         then checking starts at c with index c_start and cuts only count when after distance on that segement (cuts before are already considered)
         """
         ############ TBD: Handle accuracy in case cut is close to vertices and cutting points are close to segements, especially co-linar segments ###############
+        ################### ---> FIRST ASPECTS NOW COVERED AND IDEAS FOR OTHERS, REFER TO COMMENTS BELOW (7.20.2020)
         ############ TBD: Check where really deepcopy is required ################
         self.log.info("Polygon {} cutting with {} from start-segement {} at distance {}".format(p, c, c_start, c_start_distance))
         border_v = [] #these vertices are building the border between the cut halfs of p from entry to exit point (including vertices of c and cutting points)
@@ -144,12 +178,27 @@ class muxpArea:
             len_p = len(p)
             cP_dict = dict() #this dict will contain all cutting points of segment in c with all segments in p as values and distances to segment start of c as keys
             for j in range (len_p): #...which segments of p it will cut
-                cuttingPoint = intersection(c[i], c[i+1], p[j], p[(j+1)%len_p]) ### WHAT HAPPENS IF SEGEMENTS ARE COLINEAR???? #####
+                cuttingPoint = intersectionCL(c[i], c[i+1], p[j], p[(j+1)%len_p]) ### WHAT HAPPENS IF SEGEMENTS ARE COLINEAR???? #####
+                if cuttingPoint == "Collinear":
+                    self.log.warning("Collinear Lines in PolyCutPoly with cut segment: {} and poly segement: {} of poly: {}".format(i, j, p))
+                    ####### INFO 1: FLAT TRIAS WHERE TWO VERTICES ARE IDENTICAL ALSO COUNT AS COLLINEAR
+                    ####### INFO 2: COLLINEAR COULD ALSO HAPPEN FAR AWAY WITHOUT EXACT OVERLAPPING PARTS
+                    ### TBD: DEPENDING ON WHAT KIND OF COLLINEAR CASE WE HAVE THIS FUNCTION MIGHT NEED TO RETURN
+                    ###        at least info on border_vertices (but only returning them causes error in calling function as this expects then a cut has happened
+                    cuttingPoint = None
                 if cuttingPoint: #segement of c did cut segment of p, so we now enter/leave p
-                    self.log.info("   not confiremed cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
+                    self.log.info("   not confirmed cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
                     if i != c_start or distance(c[i], cuttingPoint) > c_start_distance: #cuts on start_segement before distance are not counted
                         self.log.info("   cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
-                        cP_dict[round(distance(c[i], cuttingPoint), 3)] = [cuttingPoint, j] #j is entry segement of p, needed to find end of outside/inside poly  #assumption is that for such polys there is no doubled cuttingPoint
+                        if round(distance(c[i], cuttingPoint), 3) in cP_dict: #### NEW 5.10.20 special case
+                            self.log.warning("Tangent cutting point at {} detected or cutting very very sharp tria!".format(cuttingPoint))
+                            cP_dict[round(distance(c[i], cuttingPoint), 3)+000.1] = [cuttingPoint, j]
+                            ######### TBD: cP_dict might not have right order by this simple statement above
+                            ########### needs to be checked which segment comes first
+                            ############ IN CASE OF SHARP TRIAS THIS COULD LEAD TO FLAT TRIAS, WHERE TWO VERTICES ARE IDENTICAL
+                            ############    -> They should be removed
+                        else: #### NEW 5.10.20 special case, was done every time before new if came
+                            cP_dict[round(distance(c[i], cuttingPoint), 3)] = [cuttingPoint, j] #j is entry segement of p, needed to find end of outside/inside poly  #assumption is that for such polys there is no doubled cuttingPoint
             if len(cP_dict) == 0: #this segement of p was not cut by c, go to next one
                 if border_v != []:
                     border_v.append(c[i+1]) #if we are already inside p, we add the current end of segemnet to border
@@ -169,6 +218,13 @@ class muxpArea:
         self.log.info("   Cutting line ended: {}".format(border_v))
         entry_segment = border_v[0][1]
         exit_segment = border_v[-1][1]
+        if int(exit_segment) != exit_segment:  # NEW 4.10.20 preventing error, that no exit segment was found and thus reference is to a coorindate as float ############ TBD ####
+            self.log.warning("No exit found in PolyCutPoly. Thus this poly is not cut!")
+            return [], [], []  # For the moment just assume that this error case is no cut !!!! ############# TBD #####
+            ###### Think of returning at least border_v; BUT first vertex still has exit segment to be removed first !! #####
+            ######     and only returning border causes error in calling function CutPoly which assumes there was a cut if border vertices are returned
+            ####### RETURN ABOVE IS TOO EARLY, THERE MIGHT BE ANOTHER CUTTING POINT LATER ???? !! ?? ###########
+            ######### This case here could be handled together with 8 lines above if len(border_v) < 2
         border_v[0] = border_v[0][0] #get rid of not needed sgement info in vertex list
         border_v[-1] = border_v[-1][0] #get rid of not needed sgement info in vertex list
         if entry_segment == exit_segment: #Special case if entry and exit on same segment, then one part is just formed by border vertices ####### NEW 18.04.2020 ##########
@@ -210,21 +266,91 @@ class muxpArea:
                 outer = part2
                 inner = part1
                 self.log.info("    SWAPPED INNER AND OUTER POLYS!")
-        ### Special case if entry and exit point are on the same segment of p, then the inner polygon makes no use of of vertices from p, just from border_v
-        #if entry_segment == exit_segment:  #### NEW 18.04.2020 Special case solved above ####
-        #    inner = deepcopy(border_v)
-        
-        outer1, inner1, border1 = self.PolyCutPoly(outer, c, i, distance(c[i], border_v[-1]) + 0.01) ######  0.0001 was not sufficeint, why so high rounding errors ??? ####
-        if border1 == []: #no further cut for outer
-            outer1 = [outer] #so we stay with the current outer
-        outer2, inner2, border2 = self.PolyCutPoly(inner, c, i, distance(c[i], border_v[-1]) + 0.01) ######  0.0001 was not sufficeint, why so high rounding errors ??? ####
-        if border2 == []: #no further cut for inner
-            inner2 = [inner] #so we stay with the current inner
+
+        ############ FOLLOWING NEW 5.10.2020 ##########################################
+        # This code shall handle edge cases where c cuts p close to points of p
+        # So either just being tangent (cutting of just one edge) or parallel of edge of p
+        # However this will not handle the exact collinear match when searching intersections above --> tbd above
+        # Also not handled yet is the case that vertex of c is close to edge/vertex of p (without cut)
+        #   -> TBD: Latest could be done before cut to check cutting line for all vertices in cutting line close to
+        #     points in mesh, and use those for cutting, and if vertices close to edges, split edges
+        ############################################
+        # Following line defines the point of current cutting line that will be used to search for further cuts
+        #    it is included here, as this part could set the value to 0, and also further improvements possible, read blelow
+        exit_distance = distance(c[i], border_v[-1]) + 0.01 ######  0.0001 was not sufficeint, why so high rounding errors ??? ####
+        # Search closest points of p to entry and exit point of cut, which are closer than ACCURACY or None else
+        close_entry_point = None  # in normal case entry and exit points are not too close to vertices of p
+        close_exit_point = None
+        """
+        for point in p:  # but check now for all vertices of p if there closer points
+            if distance(point, border_v[0]) < 1:  # border_v[0] is entry point   #### TBD: VALUE 2 IS ACCURACY TO BE DEFINED GENERALLY ###########
+                if not close_entry_point or distance(point, border_v[0]) < distance(close_entry_point, border_v[0]):
+                    close_entry_point = deepcopy(point)  # deepcopy required ??
+            if distance(point, border_v[-1]) < 1:  # border_v[-1] is exit point   #### TBD: VALUE 2 IS ACCURACY TO BE DEFINED GENERALLY ###########
+                if not close_exit_point or distance(point, border_v[-1]) < distance(close_exit_point, border_v[-1]):
+                    close_exit_point = deepcopy(point)  # deepcopy required ??
+        """
+        # When searching closest point this must be selected from vertices on the edge cut and not any point of p
+        ############ TBD: The first value compared to is ACCURACY --> SHOULD BE DEFINED FLEXIBLE WITH COMMANDS #######
+        ACCURACY = 1
+        if distance(border_v[0], p[entry_segment]) < ACCURACY and distance(border_v[0], p[entry_segment]) < distance(border_v[0], p[(entry_segment+1)%len(p)]):
+            close_entry_point = deepcopy(p[entry_segment])
+        elif distance(border_v[0], p[(entry_segment+1)%len(p)]) < ACCURACY and distance(border_v[0], p[(entry_segment+1)%len(p)]) < distance(border_v[0], p[entry_segment]):
+            close_entry_point = deepcopy(p[(entry_segment+1)%len(p)])
+        if distance(border_v[-1], p[exit_segment]) < ACCURACY and distance(border_v[-1], p[exit_segment]) < distance(border_v[-1], p[(exit_segment+1)%len(p)]):
+            close_exit_point = deepcopy(p[exit_segment])
+        elif distance(border_v[-1], p[(exit_segment+1)%len(p)]) < ACCURACY and distance(border_v[-1], p[(exit_segment+1)%len(p)]) < distance(border_v[-1], p[exit_segment]):
+            close_exit_point = deepcopy(p[(exit_segment+1)%len(p)])
+        if close_entry_point and close_exit_point and entry_segment == exit_segment and distance(close_entry_point, close_exit_point) < ACCURACY:
+            self.log.info("PolyCutPoly cuts same edge closer to vertices than accuracy. CUt is not performed and cutting vertices like {} inside that poly vanish.".format(p[i]))
+            inner = []
+            outer = p
+
+
+        # Now replace in outer and inner polys of p (after cut) the close vertices if they exist
+        for old, new in [(border_v[0], close_entry_point), (border_v[-1], close_exit_point)]:
+            if not new: continue  # if there is no closer point, then nothing to do
+            self.log.info("Close Cut: Replacing {} with {}".format(old, new))  #### TESTING ONLY #####
+            outer = self.replace_vertex_in_poly(old, new, outer)  # replace entry point by point of p
+            inner = self.replace_vertex_in_poly(old, new, inner)
+            # self.log.info("    polygon after replacement: {}".format(inner))  #### TESTING ONLY #####
+            ## FOLLOWING OPTION COULD SIMPLIFY complete function: always start with next cutting segment
+            exit_distance = 0  # VERY NEW: ACTUALLY IT SHOULD NOT BE A PROBLEM TO START WITH NEXT SEGMENT, AS ONLY CONVEX SHAPES ARE CUT BY A LINE STAY CONVEX (exception when cutting same edge twice a concave cutting line shape could stay, but completely inside the convex poly, so no further cuts expected)
+            if i < len(c) - 1: i += 1
+            # however issue, remains by vertex i+1 that lies after replacement inside inner/outer, therefore is next line
+            if PointInPoly(c[i], outer) or PointInPoly(c[i], inner):
+                if i < len(c)-1: i += 1
+                self.log.info("Cutting Point {} vanished in Poly with replaced vertices, go to next in cutting line ...".format(c[i-1]))
+                #### TBD: include vanished point in border_v !!!!!!!!!!!!!!!!!!! #########################
+        # Now also replace entry and exit points itself in the border_vertices
+        if close_entry_point: border_v[0] = close_entry_point
+        if close_exit_point: border_v[-1] = close_exit_point
+        # Special case for polys that have very small size like ACCURACY, they could completely collapse
+        ############## NOT SURE IF THIS CASE REALLY CAN HAPPEN ???? #####################
+        if len(outer) < 3 and len(inner) < 3:  # inner and outer are not 2d, so nothing would stay
+            inner = deepcopy(p)  # in that case just count this small poly as belonging to the inner  #### TBD: Option to decide if inner or outer ####
+            self.log.warning("Poly {} is too small to be cut with regard to ACCURACY, so it stays as inner Polygon.".format(p))
+        #### ALTERNATIVE FOR SIMPLIFICATION METHOD TO START WITH NEXT SEGEMENT COULD BE TO RETRIEVE UPDATED EXIT POINT
+        ####    BY USING PolyCutPoly with replaced edges
+        ################################################################################
+
+        if len(outer) >= 3:   #### NEW 5.10. as non_cut poly has either empty inner or outer
+            outer1, inner1, border1 = self.PolyCutPoly(outer, c, i, exit_distance) ######  NEW 5.10., see old definition above
+            if border1 == []:  # no further cut for outer
+                outer1 = [outer]  #s o we stay with the current outer
+        else:
+            outer1, inner1, border1 = [], [], []
+        if len(inner) >= 3:  #### NEW 5.10. as non_cut poly has either empty inner or outer
+            outer2, inner2, border2 = self.PolyCutPoly(inner, c, i, exit_distance) ######  NEW 5.10., see old definition above
+            if border2 == []:  # no further cut for inner
+                inner2 = [inner]  #s o we stay with the current inner
+        else:
+            outer2, inner2, border2 = [], [], []
         border_v.extend(border1)
         outer1.extend(outer2)
         inner1.extend(inner2)
         border_v.extend(border2)
-        self.log.info("  Cutted into outer {} and inner {}".format(outer1, inner1))
+        self.log.info("  PolyCutPoly RESULTS:\n    p = {}\n    outer = {}\n    inner = {}\n    border = {}\n".format(p, outer1, inner1, border_v))
         return outer1, inner1, border_v
 
 

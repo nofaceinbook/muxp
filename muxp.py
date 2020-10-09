@@ -1167,7 +1167,9 @@ class muxpGUI:
             if c["command"] == "cut_flat_terrain_in_mesh":
                 polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
                 ########### TBD: CutPoly should not change elevation, so it would not needed to give parameter None !!! ############
-                borderv, log_info = sortPointsAlongPoly(borderv, c["coordinates"]) # NEW 16.08.20
+                #log.info("Sorting Points along Poly: {}".format(borderv))
+                #log.info("   For following coordinates: {}".format(c["coordinates"]))
+                borderv, log_info = sortPointsAlongPoly(borderv, c["coordinates"])  # NEW 16.08.20
                 log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
                 borderv.append(borderv[0])  # make it a closed poly
                 for v in borderv:

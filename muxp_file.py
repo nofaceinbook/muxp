@@ -515,7 +515,9 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     tile_lat = "{0:+03d}".format(floor(lat_min))
     tile_lon = "{0:+04d}".format(floor(lon_min))
     muxp.append("tile: {}{}\n".format(tile_lat, tile_lon))
-    muxp.append("area: {} {} {} {}\n".format(lat_min-0.0001, lat_max+0.0001, lon_min-0.0001, lon_max+0.0001))
+    ################ TBD: Flexible defination of extending the area border to closes coordinates !!!! ###############
+    ################      For the moment it is about 10 to 50m ############################################
+    muxp.append("area: {} {} {} {}\n".format(lat_min-0.0005, lat_max+0.0005, lon_min-0.0005, lon_max+0.0005))
     muxp.append("source_dsf: DEFAULT\n")
 
     for n, r in enumerate(runways):
