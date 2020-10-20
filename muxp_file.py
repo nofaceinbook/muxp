@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.8 exp
+# muxp_file.py    Version: 0.2.9a exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -114,6 +114,12 @@ def validate_muxp(d, logname):
         err = "muxp file version is {} but version {} is supported".format( d["muxp_version"], SUPPORTED_MUXP_FILE_VERSION)
         log.warning(err)
         # return 1, err  ### NEW 29.07.2020: Don't return but continue after waring
+    try:
+        version = float(d["version"])
+    except ValueError:
+        err = "version is not of type float"
+        log.error(err)
+        return -5, err
     ### Extract and validate tile defined
     try:
         longitude = int(d["tile"][:3])
@@ -251,8 +257,8 @@ def get10grid(tile):
     grid10 = ""
     for tile_part in [tile[:3], tile[3:]]:
         if tile_part[0] == '-':
-            s = 5
-        else:
+            s = 4.99  # was before 5, but then -150 would be converted to -160, but it stays in -150 10grid
+        else:         ######### if it stays always with s=4.99 the whole function can be simplified !!! ############
             s = 4.99
         if len(tile_part) == 3:
             grid10 += "{0:+03d}".format(round((int(tile_part)-s)/10)*10)
@@ -369,6 +375,7 @@ def find_preferred_pack(preferred, available):
             else:
                 if p_value in available.keys():
                     return p_value
+        ######### TBD: Prefer to return the ACTIVE mesh if this is also in preferred list ############
         ######### TBD: if p_type cases for hash=x76h.... or agent=LR... #####################
     return None  # No match found so far
 

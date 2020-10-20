@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.9 exp"
+muxp_VERSION = "0.2.9a exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -30,7 +30,7 @@ from muxp_KMLexport import *
 from xplnedsf2 import *
 from wed_conv import MUXP
 from os import path, remove, mkdir, sep, replace, walk
-from shutil import copy2
+from shutil import copyfile, copy2
 
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
@@ -340,7 +340,7 @@ class muxpGUI:
     def select_muxpfile(self, entry, filename=None):
         # if file is set it is directly displayed
         if filename is None:
-            filename = askopenfilename(filetypes=[("MUXP files", ".muxp"), ("kml files", "muxp.kml"),
+            filename = askopenfilename(filetypes=[("MUXP files", ".muxp"), ("kml files", "muxp.kml"), ("WED files", "wed.xml"),
                                                   ("YAML files", "muxp.yaml"), ("all files", "*")])
             if not filename:
                 return
@@ -606,14 +606,13 @@ class muxpGUI:
             # in case of no issues of current file nothing to do, just stay with current file to be updated
             self.conflictStrategy = "CURRENT"
             return filename
-        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and updateAlreadyInProps(update['id'], props[0]):
-            ########## TBD: check that version to be installed is not older than current !!!! ###################
-            # in case of no issues with original and the current file only includes the update, it can be overwritten
+        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and update['version'] >= updateAlreadyInProps(update['id'], props[0]):
+            # in case of no issues with original and the current file only includes the update with same or older version, it can be overwritten
             self.conflictStrategy = "ORIGINAL"
             return filenames[2]
         if issues[1] == "None":
             # in case that backup-file has no issues, then just update this one
-            # disadvantage when using backup-file is that, the current file will not be back-upped
+            # disadvantage when using backup-file is that, the current file will not be back-up
             #   --> backup stays in order to be able to test again and again new updates starting always from backup
             self.conflictStrategy = "BACKUP"
             return filenames[1]
@@ -662,13 +661,15 @@ class muxpGUI:
         if self.conflictStrategy == "ORIGINAL": return filenames[2]
         if self.conflictStrategy == "CANCEL": return None
 
-    def warn_window(self, message, b1="OK", b2="CANCEL"):
+    def warn_window(self, message, header="WARNING", b1="OK", b2="CANCEL"):
         def set_button_selected(value):
             self.button_selected = value
         warn_win = Toplevel(self.window)
         warn_win.attributes("-topmost", True)
-        warn_label = Label(warn_win, text=message)
-        warn_label.grid(row=0, column=0, columnspan=2)
+        warn_header = Label(warn_win, text=header, anchor=W, justify=LEFT,  font=('Arial', 12, 'bold'))
+        warn_header.grid(row=0, column=0, columnspan=2, pady=5)
+        warn_label = Label(warn_win, text=message, anchor=W, justify=LEFT)
+        warn_label.grid(row=1, column=0, columnspan=2, padx=10)
         b1_button = Button(warn_win, text='  {}  '.format(b1), command=lambda: set_button_selected(b1))
         b1_button.grid(row=2, column=0, pady=4)
         b2_button = Button(warn_win, text='  {}  '.format(b2), command=lambda: set_button_selected(b2))
@@ -732,7 +733,7 @@ class muxpGUI:
                 if path.isfile(bak_file):
                     info_field.insert(END, "  WARNING: Backup file {} also exists.\n".format(bak_file))
                     #choice = warn_overwrite(bak_file)
-                    choice = self.warn_window("WARNING: Backupfile {} already exists!\nWhen you would like to keep it select CANCEL and rename it first.".format(bak_file), "OVERWRITE", "CANCEL")
+                    choice = self.warn_window("Backupfile {} already exists!\nWhen you would like to keep it select CANCEL and rename it first.".format(bak_file), "WARNING", "OVERWRITE", "CANCEL")
                     if choice == "CANCEL":
                         info_field.insert(END, "  Canceled current action!\n")
                         info_field.config(state=DISABLED)
@@ -844,10 +845,6 @@ class muxpGUI:
 
         ############# READ AND EVALUATE MUXP FILE #####################
         update, error = readMuxpFile(filename, LogName)
-        if filename.rfind("_temporary_conversion_file.muxp") > 0:
-            log.info("FOLLOWING TEMPORARY MUXP FILE WAS READ: {}\n".format(update))
-            remove(filename)  # remove temporary conversion file created above
-            log.info("Temporary muxp file: {} removed.".format(filename))
         if update == None:
             showRunResult("muxp-file ERROR", "MUXP-file {} not found.".format(filename), True)
             return -1
@@ -862,23 +859,54 @@ class muxpGUI:
         log.info("muxpfile {} with id: {} version: {} for area:{} with {} commands read.".format(update["filename"], update["id"], update["version"], update["area"], len(update["commands"])))
         
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
-        scenery_packs = None  # dictionary of scenery packs for according tiles
+        scenery_packs = None  # dictionary of scenery packs for according tiles, re-used also below for activation
         log.info("source_dsf in muxp-file: {}".format(update["source_dsf"]))
-        if update["source_dsf"].find("DEFAULT") == 0:  # skip searches when DEFAULT mesh is first preferred in MUXP file
-            self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery"  #### TBD: Define this string globally!!!
-            log.info("MUXP file asks to use DEFAULT scenery, so updating: {}".format(self.dsf_sceneryPack))
+        #if update["source_dsf"].find("DEFAULT") == 0:  # skip searches when DEFAULT mesh is first preferred in MUXP file
+        #### These lines are not used any more, as DEFAULT is also handled below to warn in case DEFAULT is not active mesh ###
+        #    self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery"  #### TBD: Define this string globally!!!
+        #    log.info("MUXP file asks to use DEFAULT scenery, so updating: {}".format(self.dsf_sceneryPack))
 
         if len(self.dsf_sceneryPack) == 0:  # no scenery pack yet defined (e.g. via config file)
             self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
             self.muxp_start.config(state="disabled")
             self.window.update()
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
+            log.info("SCENERY PACKS INSTALLED: {}".format(scenery_packs))
             preferred_pack = find_preferred_pack(update["source_dsf"], scenery_packs)
             if not preferred_pack:
-                log.info("None of the preferred packs: {}  in muxp-file found.".format(update["source_dsf"]))
+                if len(update["source_dsf"]) == 0:
+                    log.info("No preferred dsf-file defined in muxp-file. User hast to select...")
+                else:
+                    log.info("None of the preferred packs: {}  in muxp-file found.".format(update["source_dsf"]))
+                    warn_return = self.warn_window("The muxp-file has been defined to update mesh files that are\n" +
+                                     "not installed. Therefore it is recommended to STOP without\n" +
+                                     "changing the mesh. You might continue and select an other mesh\n" +
+                                     "to be updated, but there is a high chance that this will fail.\n",
+                                     "No Matching Scenery", "STOP", "continue")
+                    if warn_return == "STOP":
+                        showRunResult("Stopped", "Requested Scenery Pack missing", False)
+                        return -21
                 self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
             else:
                 log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
+                if scenery_packs[preferred_pack] != "ACTIVE" and "ACTIVE" in scenery_packs.values():
+                    # if there is no other ACTIVE pack (e.g. when only DEFAULT is installed, this is also okay)
+                    if self.activatePack:
+                        warn_return = self.warn_window("You are going to update following scenery pack:\n{}\n".format(preferred_pack) +
+                                                       "This mesh is not the active one in scenery_packs.ini.\n" +
+                                                       "As you enabled activation of updated scenery, the\n" +
+                                                       "current active mesh will not be visible at your next\n" +
+                                                       "start of X-Plane when you proceed.\n",
+                                                       "Updating Non Active Mesh", "Proceed", "Stop")
+                    else:
+                        warn_return = self.warn_window("You are going to update following scenery pack:\n{}\n".format(preferred_pack) +
+                                                       "This mesh is not the active one in scenery_packs.ini.\n" +
+                                                       "As you did not enable activation of updated scenery, the\n" +
+                                                       "update will not be visible at your next start of X-Plane.\n",
+                                                       "Updating Non Active Mesh", "Proceed", "Stop")
+                    if warn_return == "Stop":
+                        showRunResult("Stopped", "Updated mesh is not the active one.", False)
+                        return -22
                 self.dsf_sceneryPack = preferred_pack
         elif self.dsf_sceneryPack == "[ACTIVE]":
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
@@ -976,6 +1004,26 @@ class muxpGUI:
             #dsf_output_filename = writefolder + "/" + update["tile"] +".dsf" ## already set above
         log.info("Writing updated dsf file to: {}".format(dsf_output_filename))
         self.dsf.write(dsf_output_filename)
+
+        ################### SAVE USED MUXP FILE IN INSTALLED-MUXPS-FOLDER ##########
+        installed_muxp_files_dir = self.muxpfolder + "/Installed MUXP Files"  ######## TBD: DEFINE DIR GLOBALLY #####
+        installed_file = installed_muxp_files_dir + "/{} {} {}.muxp".format(update["tile"], update["id"], update["version"])
+        if not path.isdir(installed_muxp_files_dir):
+            try:
+                mkdir(installed_muxp_files_dir)
+            except OSError:
+                log.error("Folder {} for storing the MUXP files couldn't be created. So current MUXP file is not saved!".format(installed_muxp_files_dir))
+                installed_muxp_files_dir = None
+        if installed_muxp_files_dir:
+            ##### TBD: Error handling if moing/copying does not work #########
+            if filename.rfind("_temporary_conversion_file.muxp") > 0:
+                log.info("TEMPORARY MUXP FILE: {} moved now to: {}\n".format(filename, installed_file))
+                copyfile(filename, installed_file)  # move temporary conversion file to the installed ones
+                remove(filename)
+            else:
+                log.info("Saving MUXP file in installed muxp file folder as: {}".format(installed_file))
+                copyfile(filename, installed_file)
+
         
         #################### ACTIVATE SCENERY PACK ################
         if self.activatePack:
