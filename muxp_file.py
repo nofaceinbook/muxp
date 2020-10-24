@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.9a exp
+# muxp_file.py    Version: 0.2.9b exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -352,7 +352,7 @@ def findDSFmeshFiles(tile, xpfolder, logname):
     return sorted_packs
 
 
-def find_preferred_pack(preferred, available):
+def find_preferred_pack(preferred, available, muxpfolder):
     """
     Function returns the first scenery pack that is in preferred packs which is also in available packs.
     preferred is the string behind source_dsf: in muxp file and available is the dictionary of available dsf packs.
@@ -360,24 +360,39 @@ def find_preferred_pack(preferred, available):
     """
     if len(preferred) == 0:
         return None
+    active_pack = []  # Always try to use active pack if possible, so check which one is active
+    matching_packs = []  # Packs that are available and in the preferred list
+    for p in available:
+        if available[p] == 'ACTIVE':
+            active_pack = p
+            break
     preferred = preferred.split()
     for p in preferred:
         if p == "DEFAULT":
-            return "Global Scenery/X-Plane 11 Global Scenery"  #### TBD: Define this string globally!!!"
+            if muxpfolder[muxpfolder.find("Custom Scenery"):] in available:  # when tile in muxpfolder, this is also changed DEFAULT
+                matching_packs.append(muxpfolder[muxpfolder.find("Custom Scenery"):])  # Convert MUXP-folder to pack
+            matching_packs.append("Global Scenery/X-Plane 11 Global Scenery")  #### TBD: Define this string globally!!!"
+            continue
         p_type, p_value = p.split('=')
-        if p_type == "pack":
+        if p_type == "pack":  ######### TBD: if p_type cases for hash=x76h.... or agent=LR... #####################
             p_value = p_value.replace('%', ' ')  # whitespace was written as '%' and is now converted back
             if p_value[0] == "*":
                 p_value = p_value[1:]
                 for a in available.keys():
                     if a.find(p_value) >= 0:
-                        return a
+                        matching_packs.append(a)
             else:
                 if p_value in available.keys():
-                    return p_value
-        ######### TBD: Prefer to return the ACTIVE mesh if this is also in preferred list ############
-        ######### TBD: if p_type cases for hash=x76h.... or agent=LR... #####################
-    return None  # No match found so far
+                    matching_packs.append(p_value)
+    if not matching_packs:
+        return None
+    elif active_pack and active_pack in matching_packs:  # if active pack exists and matches this is preferred
+        return active_pack
+    else:
+        return matching_packs[0]  # if active pack does not match then return the first match found
+
+
+
 
 
 

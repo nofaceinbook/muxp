@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.9a exp"
+muxp_VERSION = "0.2.9b exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -872,7 +872,7 @@ class muxpGUI:
             self.window.update()
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             log.info("SCENERY PACKS INSTALLED: {}".format(scenery_packs))
-            preferred_pack = find_preferred_pack(update["source_dsf"], scenery_packs)
+            preferred_pack = find_preferred_pack(update["source_dsf"], scenery_packs, self.muxpfolder)
             if not preferred_pack:
                 if len(update["source_dsf"]) == 0:
                     log.info("No preferred dsf-file defined in muxp-file. User hast to select...")
@@ -890,6 +890,7 @@ class muxpGUI:
             else:
                 log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
                 if scenery_packs[preferred_pack] != "ACTIVE" and "ACTIVE" in scenery_packs.values():
+                    ## TBD better then change preferred PACK above    and not (self.muxpfolder.find(ACTIVE_pack) >= 0 and preferred_pack != "Global Scenery/X-Plane 11 Global Scenery"): #### NOT CORRECT YET !!!!!  ACTIVE_pack does not exist ###############
                     # if there is no other ACTIVE pack (e.g. when only DEFAULT is installed, this is also okay)
                     if self.activatePack:
                         warn_return = self.warn_window("You are going to update following scenery pack:\n{}\n".format(preferred_pack) +
@@ -917,11 +918,11 @@ class muxpGUI:
             if self.dsf_sceneryPack == "[ACTIVE]":  # if no ACTIVE pack found above
                 self.dsf_sceneryPack = "Global Scenery/X-Plane 11 Global Scenery"  # then use Default Scenery as ACTIVE
             log.info("Config requested to use active scenery pack as source, which is: {}".format( self.dsf_sceneryPack))
-        else:  # scenery_pack defined (e.g. via config file)
-            if self.dsf_sceneryPack.find("X-Plane 11 Global Scenery") >= 0: #in case default XP scenery selected
-                if path.exists(self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"): #and tile is already in muxpfolder
-                    self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):]  # choose muxpfolder as scenery_pack to update
-                    log.info("As muxp-folder {} includes tile {} this will be updated instead of plain default tile.".format(self.dsf_sceneryPack, update["tile"]))
+        #### FOLLOWING IS NOT ANY MORE THIS else:  # scenery_pack defined (e.g. via config file) ==> ALWAYS RELEVANT
+        if self.dsf_sceneryPack.find("X-Plane 11 Global Scenery") >= 0: #in case default XP scenery selected
+            if path.exists(self.muxpfolder + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"): #and tile is already in muxpfolder
+                self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):]  # choose muxpfolder as scenery_pack to update
+                log.info("As muxp-folder {} includes tile {} this will be updated instead of plain default tile.".format(self.dsf_sceneryPack, update["tile"]))
         dsf_output_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf" #this is default dsf filename name for scenery pack
             ### WARNING: In case of default mesh, the dsf_output_filname needs to be changed to the one in muxpfolder (done below)
         #if self.dsf_sceneryPack.find("X-Plane 11 Global Scenery") >= 0:
