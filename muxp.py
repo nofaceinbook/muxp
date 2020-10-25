@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.9b exp"
+muxp_VERSION = "0.2.9c exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -423,8 +423,8 @@ class muxpGUI:
             pack_activated = False
             for line in f:
                 if line.startswith("SCENERY_PACK"):
-                    scenery = line[line.find(" ")+1:]
-                    if scenery == pack+'/\n':  # '/\n' always in .ini at end of folder
+                    scenery = line[line.find(" ")+1:-2]  # remove '\/n' at end of line for comparison below
+                    if scenery == pack:
                         if not pack_activated:
                             new_infile.append("SCENERY_PACK {}/\n".format(pack)) # '/' required in ini to be a correct path
                             log.info("Scenery pack '{}' for updated dsf-file was already in scenery_packs.ini. Set to an active pack.".format(scenery))
@@ -434,7 +434,7 @@ class muxpGUI:
                     elif not pack_activated and (scenery > pack or scenery in before_packs):  
                         log.info("Include new scenery pack for updated dsf-files in scenery_packs.ini before: {}".format(scenery))
                         new_infile.append("SCENERY_PACK {}/\n".format(pack)) # '/' required in ini to be a correct path
-                        new_infile.append(line) #als keep scenery pack, that was at that position
+                        new_infile.append(line) #also keep scenery pack, that was at that position
                         pack_activated = True
                     else:
                         new_infile.append(line) #just keep scenery pack
