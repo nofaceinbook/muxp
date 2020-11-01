@@ -6,7 +6,7 @@ As shonw in this picture you can adapt the mesh e.g. to prepare the terrain for 
 ## WARNING - Early Development Stage
 This program is in an early development stage and still has some errors. For the moment only use it in case you know what you are doing. In any case you do everything on your own risk.
 
-Refer [Limitations](https://github.com/nofaceinbook/muxp/blob/master/LIMITATIONS.md)  of that early version and the already [Known Issues](https://github.com/nofaceinbook/muxp/issues).
+Refer to the already [Known Issues](https://github.com/nofaceinbook/muxp/issues) and feel free to add ones that you might find.
 
 ## Highlights
 
