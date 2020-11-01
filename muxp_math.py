@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.2.9 exp
+# muxp_math.py   Version: 0.3.0 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -451,15 +451,58 @@ def InTriangleBary(a, b, c, p):
     return True
 
 def InTriangle(a, b, c, p):
+    # This function checks if p is inside tria (a,b,c) and returns epsilon with possible error/distance of p to tria
+    # Small epsilon indicates that p is very close to a edge of tria
     c1 = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
     #c1 = (x2-x1)*(yp-y1)-(y2-y1)*(xp-x1)
     c2 = (c[0] - b[0]) * (p[1] - b[1]) - (c[1] - b[1]) * (p[0] - b[0])
     #c2 = (x3-x2)*(yp-y2)-(y3-y2)*(xp-x2)
     c3 = (a[0] - c[0]) * (p[1] - c[1]) - (a[1] - c[1]) * (p[0] - c[0])
     #c3 = (x1-x3)*(yp-y3)-(y1-y3)*(xp-x3)
+    minsign = min(c1, c2, c3)
+    maxsign = max(c1, c2, c3)
+    epsilon = min(abs(minsign), abs(maxsign))
+    #print("InTriangleValues: {} {} {} with epsilon: {} and vector: {}".format(c1, c2, c3, epsilon, PointLocationInTria(p, [a, b, c])))
+    #print("   p: {}  Tria: {}".format(p, [a, b, c]))
     if (c1 < 0 and c2 < 0 and c3 < 0) or (c1 > 0 and c2 > 0 and c3 > 0):
-        return True
-    return False
+        return True, epsilon
+    return False, epsilon
+
+"""
+#### The following function is not really better
+def InTriangleIdeaForBetterEpsilon(a, b, c, p):
+    # This function checks if p is inside tria (a,b,c) by checking for all vertices of tria all on which side
+    # of the halfplane the other vertices of tria lie. This takes more time, but returns accurate epsilon
+    # failure in case vertices are collinear. Because it could be that a vertex is far outside of tria but
+    # is collinear to the line tested --> test also other lines
+    inside = True  # assume p is true; change it if halfplane found where vertices on other sides
+    eps = [0, 0, 0]  # minimum kind of distance / error from each halfplane
+    eps_false = 0  # epsilon in case p not in tria; in that case epsilon is only taken from cases that falsify
+    s = [0, 0, 0, 0, 0, 0]
+    s[0] = (b[1] - p[1]) * (a[0] - p[0]) - (a[1] - p[1]) * (b[0] - p[0])  # Side of b for pa
+    s[1] = (c[1] - p[1]) * (a[0] - p[0]) - (a[1] - p[1]) * (c[0] - p[0])  # Side of c for pa
+    eps[0] = min(abs(s[0]), abs(s[1]))
+    if (s[0] < 0 and s[1] < 0) or (s[0] > 0 and s[1] > 0):
+        inside = False
+        eps_false = eps[0]
+    s[2] = (a[1] - p[1]) * (b[0] - p[0]) - (b[1] - p[1]) * (a[0] - p[0])  # Side of a for pb
+    s[3] = (c[1] - p[1]) * (b[0] - p[0]) - (b[1] - p[1]) * (c[0] - p[0])  # Side of c for pb
+    eps[1] = min(abs(s[2]), abs(s[3]))
+    if (s[2] < 0 and s[3] < 0) or (s[2] > 0 and s[3] > 0):
+        inside = False
+        eps_false = max(eps[1], eps_false)
+    s[4] = (a[1] - p[1]) * (c[0] - p[0]) - (c[1] - p[1]) * (a[0] - p[0])  # Side of a for pc
+    s[5] = (b[1] - p[1]) * (c[0] - p[0]) - (c[1] - p[1]) * (b[0] - p[0])  # Side of b for pc
+    eps[2] = min(abs(s[4]), abs(s[5]))
+    if (s[4] < 0 and s[5] < 0) or (s[4] > 0 and s[4] > 0):
+        inside = False  # No third halfplane check actually not required
+        eps_false = max(eps[2], eps_false)  # but to get correct epsilon in falsify case
+    print(s)
+    if inside:
+        return True, min(eps[0], eps[1], eps[2])
+    else:
+        return False, eps_false
+"""
 
 
 def IsClockwise(poly):
@@ -472,6 +515,48 @@ def IsClockwise(poly):
         return True
     return False
 
+
+#### FOLLOWING FUNCTION NOT FINISHED AND PROBABLY NOT NEEDED #############
+"""
+def DiscardCollinearPointsInPoly(poly):
+    # Takes out collinear points (at minimum 3) out of the poly e.g. for better triangulation
+    # Returns the new poly and list of endpoints of such collienar points
+    print("Checking whether Poly {} has more than 2 Collinear Points!".format(poly))
+    line_angle = 179  # when maximum angle of 3 points is bigger, then they are considered a line
+    endpoints = []  # pairs of start and endpoints of collinear points
+    start_line = None  # index where such line in poly starts; expect there is no such line in poly
+    end_line = None  # index where such line in poly ends; expect there is no such line in poly
+    n = len(poly)
+
+    for i in range(n):
+        if max_tria_angle([poly[i], poly[(i + 1) % n], poly[(i + 2) % n]]) <= line_angle:
+            break  # i is now not on a collinear point list
+    if i == n - 1:  # all points in poly are collinear
+        print("All points in poly are collinear. Return Poly as it is.")
+        return poly, endpoints
+    print("Starting search for collinear points at index: {}".format(i + 1))
+    for i in range(i + 1, n + 2):  # need to go 3 points over the end in order first points are collinear
+        if max_tria_angle([poly[i % n], poly[(i + 1) % n], poly[(i + 2) % n]]) > line_angle:
+            j = i + 1
+            while max_tria_angle([poly[j % n], poly[(j+1)%n], poly[(j+2)%n]]) > line_angle:
+                j += 1
+                endpoints.append([poly[i%n], poly[(j + 1)%n]])
+                print("Collinear Points from index {} ({}) to {} ({})".format(i%n, i, (j+1)%n, j + 1))
+                if i - 1 < n <= j + 1:  # we swapped around start from poly
+                    new_poly = poly[(j + 1) % n:(i-1) % n]
+                else:
+                    new_poly = poly[:(i-1) % n] + poly[(j+1) % n:]
+
+                print("New Poly: {}  Removed collinear points between endpoints: {}".format(new_poly, endpoints))
+                ### TBD: recursive calls
+                return new_poly, endpoints
+    print("No collinear points found!")
+    return poly, endpoints
+"""
+
+"""
+# old function that just gives ear without further conditions for the ear
+# not needed any more
 def GetEar(poly):
     size = len(poly)
     if size < 3:
@@ -498,48 +583,116 @@ def GetEar(poly):
                 return (p1, p2, p3)
     print('GetEar(): no ear found')
     return []
+"""
 
-def GetMinEar(poly): ### NEW NEW: Try to cut first ears with minimal length to avoid long edges from one vertex
+"""
+# This functions tries to get ears with minimal maximum angle of tria, to avoid silver trias
+# Currently not used
+def GetMinEarAngle(poly): ### NEW NEW: Try to cut first ears with minimal length to avoid long edges from one vertex
+    #print("Searching ear for poly: {}".format(poly))
     size = len(poly)
     if size < 3:
         return []
     if size == 3:
         tri = (poly[0], poly[1], poly[2])
+        #print("Ear = Tria with maxangle {}".format(max_tria_angle(tri)))
         del poly[:]
         return tri
-    mindist = 99999999 #New
-    minindex = None #New
-    fallback = None #New3 Have tria in case no tria is fulfilling max angle requirement
+    minangle = 181
+    minindex = None  # index for tria wiht minimum maximum angle (avoid silver trias)
+    fallback = None  # Have tria in case no tria is fulfilling max angle requirement
     for i in range(size):
+        #print("Checking if vertex {} is ear".format(i))
         tritest = False
+        epsilon = 1  # smallest error for deciding if point is in tria (1 we assume there is no such error)epsilon = 1
         p1 = poly[(i-1) % size]
         p2 = poly[i % size]
         p3 = poly[(i+1) % size]
         if IsConvex(p1, p2, p3):
             for x in poly:
-                if not (x in (p1, p2, p3)) and InTriangle(p1, p2, p3, x):
-                    tritest = True
-            if not tritest:
-                if max_tria_angle([p1, p2, p3]) < 177:  # avoid trias being just a line
-                    if distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist:
-                        mindist = distance(poly[(i-1) % size], poly[(i+1) % size])
-                        minindex = i
-                else:  # we have (nearly) a line tria, but a tria
-                    fallback = i
+                if not (x in (p1, p2, p3)):  # no Test if x is in triangle if x is part of triangle
+                    test, eps = InTriangle(p1, p2, p3, x)
+                    if test: tritest = True  # to make sure that if that once to True it will not set to False again, as at least one point is inside tria
+                    if eps < epsilon: epsilon = eps
+            if not tritest:  # no point of poly is in tria, so we have an ear
+                print("Ear found at {} with epsilon {}".format(i, epsilon))
+                if epsilon < 1e-09:  # Avoid this ear in case at least one point of poly is very close to ear
+                    fallback = i  # but could still be used in case no better ear found
+                elif max_tria_angle([p1, p2, p3]) < minangle:
+                    minangle = max_tria_angle([p1, p2, p3])
+                    minindex = i
                         
-    if minindex == None: #New
-        if fallback != None: #New3
-            minindex = fallback #New3
-        else: #New3
+    if minindex == None:
+        if fallback != None:
+            minindex = fallback
+            print("Using fallback index with small epsilon, so silver tria")
+        else:
             print('GetEar(): no ear found')
             return []
-    #NEW 3: below un-indented
-    i = minindex #this was index with minimal ear-edge-length
+    #print("Taking ear at index {} with max. angel {}".format(minindex, minangle))
+    i = minindex #this was index with minimal maximum-tria-angle, or fallback if no such tria exists
     p1 = poly[(i-1) % size]
     p2 = poly[i % size]
     p3 = poly[(i+1) % size]
     del poly[i % size]
     return (p1, p2, p3)
+"""
+
+
+def GetMinEar(poly):  # Try to cut first ears with minimal length to avoid long edges from one vertex
+    # but it is also considered not to get tria with maximum angles, so no silver trias
+    # and it checks epsilon when checking if vertices of poly are inside ear; tries to avoid ears where such
+    # a vertex of poly is close to cut edge of ear (small epsilon), as this would generate silver trias in next steps
+    # print("Searching ear for poly: {}".format(poly))
+    size = len(poly)
+    if size < 3:
+        return []
+    if size == 3:
+        tri = (poly[0], poly[1], poly[2])
+        # print("Poly = Ear (just 3 vertices)")
+        del poly[:]
+        return tri
+    mindist = 999999
+    minindex = None  # index for tria wiht minimum maximum angle (avoid silver trias)
+    fallback = None  # Have tria in case no tria is fulfilling max angle requirement
+    for i in range(size):
+        # print("Checking if vertex {} is ear".format(i))
+        tritest = False
+        epsilon = 1  # smallest error for deciding if point is in tria (1 we assume there is no such error)epsilon = 1
+        p1 = poly[(i - 1) % size]
+        p2 = poly[i % size]
+        p3 = poly[(i + 1) % size]
+        if IsConvex(p1, p2, p3):
+            for x in poly:
+                if not (x in (p1, p2, p3)):  # no Test if x is in triangle if x is part of triangle
+                    test, eps = InTriangle(p1, p2, p3, x)
+                    if test: tritest = True  # to make sure that if that once to True it will not set to False again, as at least one point is inside tria
+                    if eps < epsilon: epsilon = eps
+            if not tritest:  # no point of poly is in tria, so we have an ear
+                print("Ear found at {} with epsilon {}".format(i, epsilon))
+                if epsilon < 1e-09:  # Avoid this ear in case at least one point of poly is very close to ear
+                    fallback = i  # but could still be used in case no better ear found
+                elif max_tria_angle([p1, p2, p3]) > 175: # Also avoid if ear itself is silver tria
+                    fallback = i  # but still could be used in case no better ear found
+                elif distance(poly[(i-1) % size], poly[(i+1) % size]) < mindist:
+                    mindist = distance(poly[(i-1) % size], poly[(i+1) % size])
+                    minindex = i
+
+    if minindex == None:
+        if fallback != None:
+            minindex = fallback
+            print("Using fallback index with small epsilon, so silver tria")
+        else:
+            print('GetEar(): no ear found')
+            return []
+    # print("Taking ear at index {} with distance {}".format(minindex, mindist))
+    i = minindex  # this was index with minimal distance, or fallback if no such tria exists
+    p1 = poly[(i - 1) % size]
+    p2 = poly[i % size]
+    p3 = poly[(i + 1) % size]
+    del poly[i % size]
+    return (p1, p2, p3)
+
 
 def earclipTrias(pts):  ###original name of function was triangulate
     """

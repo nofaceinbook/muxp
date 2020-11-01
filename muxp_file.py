@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.2.9b exp
+# muxp_file.py    Version: 0.3.0 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -103,7 +103,18 @@ def validate_muxp(d, logname):
     for obv in OPTIONAL_BASE_VALUES:
         if obv not in d:
             d[obv] = ""
-    ### CONVERT AND CHECK BASE VALUES        
+    ### CONVERT OPTIONAL VALUES THAT ARE NO STRING
+    if d["elevation_step"] != "":
+        try:
+            d["elevation_step"] = float(d["elevation_step"])
+        except ValueError:
+            err = "elevation_step is not of type float"
+            log.error(err)
+            return -7, err
+    else:
+        d["elevation_step"] = 0.05  # default setting are 0.05 m steps for different elevations in mesh
+
+        ### CONVERT AND CHECK BASE VALUES
     try:
         muxp_version = float(d["muxp_version"])
     except ValueError:
@@ -542,13 +553,25 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     muxp.append("area: {} {} {} {}\n".format(lat_min-0.0005, lat_max+0.0005, lon_min-0.0005, lon_max+0.0005))
     muxp.append("source_dsf: DEFAULT\n")
 
+    for n, b in enumerate(bounds):
+        muxp.append("\n")
+        if meshtype == "TIN":
+            muxp.append("limit_edges.{}:\n".format(bound_names[n]))
+            muxp.append("   edge_limit: 100\n")
+        else:  # flatten
+            muxp.append("cut_polygon.{}:\n".format(bound_names[n]))
+            muxp.append("   elevation: {}\n".format(apt_elev))
+        muxp.append("   coordinates:\n")
+        for v in b:
+            muxp.append("   - {} {}\n".format(v[1], v[0]))
+
     for n, r in enumerate(runways):
         muxp.append("\n")
         if meshtype == "TIN":
             rwy_vec = ((r[1][0] - r[0][0])/3, (r[1][1] - r[0][1])/3)  # vector for 1/3rd of rwy
             muxp.append("cut_spline_segment.runway_{}:\n".format(n))
             muxp.append("   width: {}\n".format(r[2]))
-            muxp.append("   profile_interval: 50\n   terrain: lib/g10/terrain10/crp_wrm_sdry.ter\n")
+            muxp.append("   profile_interval: 50\n   terrain: lib/g10/terrain10/apt_tmp_dry.ter\n")
             muxp.append("   3d_coordinates:\n")
             muxp.append("   - {} {} -32768\n".format(r[0][0], r[0][1]))
             muxp.append("   - {} {} -32768\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
@@ -560,18 +583,6 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
             muxp.append("   coordinates:\n")
             for v in segmentToBox(r[0], r[1], r[2]):
                 muxp.append("   - {} {}\n".format(v[1], v[0]))
-
-    for n, b in enumerate(bounds):
-        muxp.append("\n")
-        if meshtype == "TIN":
-            muxp.append("limit_edges.{}:\n".format(bound_names[n]))
-            muxp.append("   edge_limit: 100\n")
-        else: #  flatten
-            muxp.append("cut_polygon.{}:\n".format(bound_names[n]))
-            muxp.append("   elevation: {}\n".format(apt_elev))
-        muxp.append("   coordinates:\n")
-        for v in b:
-            muxp.append("   - {} {}\n".format(v[1], v[0]))
 
     if apt_flatten:  # flatten_flag set
         muxp.append("\nunflatten_default_apt:\n")

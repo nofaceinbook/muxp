@@ -1,8 +1,9 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.1
+SUPPORTED_MUXP_FILE_VERSION = 0.3
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 
-OPTIONAL_BASE_VALUES = ["description", "author", "source_dsf"]  # only strings are allowed optional
+OPTIONAL_BASE_VALUES = ["description", "author", "source_dsf", "elevation_step"]  # optional values are usually strings
+# elevation step will be converted to float and set to 0.05 if it is not present in MUXP file
 
 MUXP_COMMANDS = (
     "cut_polygon",
@@ -17,7 +18,7 @@ MUXP_COMMANDS = (
     "extract_mesh_to_file",
     "insert_mesh_from_file",
     "exit_without_update",
-    "unflatten_default_apt",
+    "unflatten_default_apt"
 )
 
 MUXP_PARAMS = (
@@ -27,7 +28,7 @@ MUXP_PARAMS = (
     "include_raster_square_criteria",
     "edge_limit",
     "width",
-    "profile_interval",
+    "profile_interval"
 )
 
 MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],

@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.2.9c exp"
+muxp_VERSION = "0.3.0 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1071,7 +1071,8 @@ class muxpGUI:
         a = muxpArea(self.dsf, LogName)
         log.info("Area to be extracted: {}".format(update["area"]))
         a.extractMeshArea(*update["area"])
-        elevation_scale = 1 ### IMPORTANT: When command set sub-meter vertices this scale has to be adapted
+        elevation_scale = update["elevation_step"]
+        log.info("Elevation Scale = elevation_step defined in MUXP file is: {} m (or 0.05 m in case no value present)".format(elevation_scale))
         
         areabound = [(update["area"][2],update["area"][0]), (update["area"][2],update["area"][1]), (update["area"][3],update["area"][1]),
                      (update["area"][3],update["area"][0]), (update["area"][2],update["area"][0]) ]
@@ -1118,7 +1119,7 @@ class muxpGUI:
                                 log.info(
                                     "Vertex no. {} of tria no. {} at {} set to elevation {} with l0={} and l1={}".format(
                                         v, nt, t[v][:2], t[v][2], l0, l1))
-                    elevation_scale = 0.05  # allows 5cm elevation steps  #### TBD: Make this value configurable in command
+                    # elevation_scale = 0.05  # is now default value and configurable in MUXP File
                 else:
                     log.warning("Command {} does neither have value to set elevation nor 3d_coordinates for elevation by triangle. So nothing changed".format(c["command"]))
                 if self.kmlExport:
@@ -1151,7 +1152,7 @@ class muxpGUI:
                 borderlandpoly = a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
                 if len(borderlandpoly) == 0:  # Error occurred when inserting
                     return -11
-                elevation_scale = 0.05  # allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
+                # elevation_scale = 0.05  # is now default value and configurable in MUXP File
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"], borderlandpoly], a.atrias, kml_filename + "_{}".format(c_index + 1))
             
@@ -1205,7 +1206,7 @@ class muxpGUI:
                             l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
                             t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
                             log.info("Vertex no. {} of tria no. {} at {} set to ramp-elevation {} with l0={} and l1={}".format(v, nt, t[v][:2], t[v][2], l0, l1))
-                elevation_scale = 0.05  # allows 5cm elevation steps  #### TBD: Make this value configurable in command
+                # elevation_scale = 0.05  # is now default value and configurable in MUXP File
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  # polys are returned without last vertex beeing same as first
@@ -1268,10 +1269,12 @@ class muxpGUI:
                     elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
                     log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
                     vertex[2] = elev
+                log.info("=== Now assigning spline elevation for borderv ===")
                 for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
                     elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)   #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
+                    log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
                     vertex[2] = elev
-                elevation_scale = 0.05 #allows 5cm elevation steps   #### TBD: Make this value configurable in command #########
+                #elevation_scale = 0.05  # is now default value and configurable in MUXP File
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
@@ -1294,7 +1297,7 @@ class muxpGUI:
                 a.limitEdges(c["coordinates"], c["edge_limit"])
                 log.info("Edges in area have been limited")
                 if self.kmlExport:
-                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index))
+                    kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index+1))
             
             if c["command"] == "update_raster_elevation":
                 log.info("CHANGING FOLLOWING RASTER SQUARES TO ELEVATION OF: {} m".format(c["elevation"]))

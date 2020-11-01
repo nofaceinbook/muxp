@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.2.7"
+muxpKMLexport2_VERSION = "0.3.0"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by bflat.py (Tool for flattening X-Plane Mesh)
@@ -310,7 +310,7 @@ def muxp2kml(filename, logname):
     kml.append("<kml xmlns=\"http://www.opengis.net/kml/2.2\" >\n")
     kml.append("<Document>\n\n")
     head, tail = path.split(filename)
-    kml.append("<name>{}.kml</name>".format(tail))
+    kml.append("<name>{}</name>".format(tail))
 
     kml.append("<description>\n")
     for d in muxpdefs:

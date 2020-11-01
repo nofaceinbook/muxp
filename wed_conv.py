@@ -54,7 +54,7 @@ class MUXP(object):
 
             commands = k.split('.')
 
-            if commands[0] in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf'):
+            if commands[0] in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf', 'elevation_step'):  # schmax updated with new keys
                 ##### TBD: HAVE THIS META-DATA GLOBALLY DEFINED ###############
                 wed.add_meta(object_name=f"{k}:{v}")
 
@@ -205,7 +205,7 @@ class MUXP(object):
 
             if ':' in wed_command and o['@class'] == 'WED_ObjPlacement':
                 key, value = wed_command.split(':')
-                if key in ('muxp_version', 'version', 'elevation', 'width', 'profile_interval', ):
+                if key in ('muxp_version', 'elevation', 'width', 'profile_interval', ):  # schmax removed 'version' from list as MUXP is keeping this as string and to avoid that 1.0 is converted to 1
                     if float(value) == int(float(value)):
                         cmd_yaml[key] = int(float(value))
                     else:
@@ -238,7 +238,7 @@ class MUXP(object):
             if ':' in wed_command and o['@class'] == 'WED_ObjPlacement':
                 key, value = wed_command.split(':')
 
-                if key in ('muxp_version', 'version', ):
+                if key in ('muxp_version', ): # schmax removed 'version' from list as MUXP is keeping this as string and to avoid that 1.0 is convert
                     if float(value) == int(float(value)):
                         self.muxp_yaml[key] = int(float(value))
                     else:
@@ -258,7 +258,7 @@ class MUXP(object):
                 if o['hierarchy']['@hidden'] == '0':
                     self.muxp_yaml[wed_command] = self.wed_collect_command(o)
 
-        # for command in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf' ):
+        # for command in ('muxp_version', 'id', 'version', 'description', 'author', 'tile', 'source_dsf', 'elevation_step' ):  # schmax updated with new keys
         #     o = g.get_object()
 
         y = yaml.dump(

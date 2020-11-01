@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.2.9 exp
+# muxp_area.py    Version: 0.3.0 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -441,9 +441,12 @@ class muxpArea:
 
             for poly in o: #outer polys have always to be earclipped, but no elevation/terrian change
                 self.log.info("Earclipping outer poly: {}".format(poly)) ############### ERROR CHECKING, TO BE REMOVED ##############
-                if len(earclipTrias(deepcopy(poly))) < len(poly) - 2: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclipTrias(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
-                for tria in earclipTrias(deepcopy(poly)): #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
+                clipped_trias = earclipTrias(deepcopy(poly))
+                self.log.info("Clipped Trias: {}".format(clipped_trias))
+                if len(clipped_trias) != len(poly) - 2: self.log.error("Earclip does return {} trias for {} vertices for poly: {}".format(len(clipped_trias), len(poly), poly))  #### ERROR CHECKING ONLY ######
+                for tria in clipped_trias: #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
                     if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
+                    if max_tria_angle(tria) > 175: self.log.warning("Earclip returend silver tria with max angle {}. Tria: {}".format(max_tria_angle(tria), tria))
                     new_v = [None, None, None]
                     for e in range(3):
                         new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
@@ -976,8 +979,13 @@ class muxpArea:
                             self.dsf.Scalings.append(deepcopy(self.dsf.Scalings[t[vt+3][0]])) #get scalings from the original tria vertex the new vertex is inside
                         ########## HOWEVER NEW VERTEX MIGHT BE OUTSIDE THESE SCALINGS --> check and adapt if required AFTER elevation was adapted as needed
                         if elevscal < 1: #for given submeter elevation pool-scaling has to be adapted
-                            self.dsf.Scalings[-1][2][0] = 65535 * elevscal #new multiplier based on required scaling for elevation defined for new pool
-                            self.dsf.Scalings[-1][2][1] = int(-500 + int((v[2]+500)/(65535 * elevscal)) * (65535 * elevscal)) #offset for elevation of v   ######## -500m is deepest vaule that can be defined with this routine ####
+                            if v[2] < -32767:  # In case of Raster elevation take default scaling to avoid rounding errors  ### NEW 27.10.20 ###
+                                self.log.info("First vertex for new Pool has Raster elevation. Create this Pool now with default scaling in order to avoid rounding errors.")
+                                self.dsf.Scalings[-1][2][0] = 32268  # so with this Pool we can reach from -32768 to -500m; above use regular Pool (## 65535 * elevscal caused also rounding issues##)
+                                self.dsf.Scalings[-1][2][1] = -32768  # Off-Set is exact RASTER Elevation (for exact matching), no need to go deeper
+                            else: ### Following two lines are else
+                                self.dsf.Scalings[-1][2][0] = 65535 * elevscal #new multiplier based on required scaling for elevation defined for new pool
+                                self.dsf.Scalings[-1][2][1] = int(-500 + int((v[2]+500)/(65535 * elevscal)) * (65535 * elevscal)) #offset for elevation of v   ######## -500m is deepest vaule that can be defined with this routine ####
                         ## Check new scaling for vertex and adapt as required based on multipliers / offsets give
                         scale_checked = False
                         while not scale_checked:
@@ -1110,13 +1118,13 @@ class muxpArea:
         self.log.info("Checking if close edge for vertex {} is found.".format(v))
         new_trias = []
         old_trias = []
-        for t in self.atrias:
+        for enum_t, t in enumerate(self.atrias):
             for e in range(3):
                 e_part, o_part, dist = edgeDistance(v, t[e][:2], t[(e+1)%3][:2])
                 if e_part > 0 and e_part < 1: #v must be between two vertices of edge
                     if distance(v, t[e][:2]) > mindist and distance(v, t[(e+1)%3][:2]) > mindist: #v must not be too close to tria edge vertices
                         if abs(dist) < mindist:
-                            self.log.info("   Close edge from {} to {} with distance {} found and splitted (e-part: {}).".format(t[e], t[(e+1)%3], dist, e_part))
+                            self.log.info("   Close edge in tria {} on edge {} found from {} to {} with distance {} --> splitted (e-part: {})  Tria: {}.".format(enum_t, e, t[e], t[(e+1)%3], dist, e_part, t))
                             new_v = createFullCoords(v[0], v[1], t) #use v now as point of both new trias
                             new_trias.append([ t[e], new_v, t[(e+2)%3], t[3], t[4], t[5], t[6]])
                             new_trias.append([ new_v, t[(e+1)%3], t[(e+2)%3], t[3], t[4], t[5], t[6]])
