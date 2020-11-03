@@ -2,7 +2,7 @@
 This program allows to update the mesh files (.dsf-files) for X-Plane 11.
 ![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MuxpBeforeAfterYYR.JPG)
 
-As shonw in this picture you can adapt the mesh e.g. to prepare the terrain for a new runway or even change the terrain like adding lakes.
+As shown in this picture you can adapt the mesh e.g. to prepare the terrain for a new runway or even change the terrain like adding lakes.
 
 
 ## Highlights
@@ -20,8 +20,11 @@ As shonw in this picture you can adapt the mesh e.g. to prepare the terrain for 
 
 
 ## Installation
-Under Windows just [downlaod the executable](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP_Win64_EXE.zip) and unzip the folder with executalbe MUXP program in your X-Plane Custom Scenery Folder. Done.
-For Mac/Linux you need to download the Python Source Code, install further needed libraries and run it with Python on your computer. The [manual](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP-Manual.pdf) includes more information.
+Under Windows just [downlaod the executable](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP_Win64_EXE.zip) 
+and unzip the folder with executalbe MUXP program in your X-Plane Custom Scenery Folder. Done.
+For Mac/Linux you need to download the Python Source Code, install further needed libraries and run it with Python
+on your computer. The [manual](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP-Manual.pdf) 
+includes more information.
 
 
 ## Updating Your Mesh
@@ -46,7 +49,18 @@ Refer to the already [Known Issues](https://github.com/nofaceinbook/muxp/issues)
 
 
 ## How does MUXP work
-Muxp adapts the dsf-files of X-Plane that do include the mesh information (not the dsf files including overlays or e.g. airport buildings). For the adaption the scenery developer creates a muxp file (yaml text file) including defintions for the mesh like flattening of a certain area. This muxp file is submitted e.g. with other scenerey files (e.g. new airport) to the user. The user installs scenery as normal. The muxpf file is then processed by this muxp tool. The tool is searching automatically for installed mesh files (such as Ortho, HD Mesh or even already adapted dsf files) and the user can decide which one to be updated. Processed default dsf files are stored in the muxp updated mesh folder within Custom Scenery. Adapted custom meshes will stay in their Custom Scenery subfolder and the original custom dsf is saved as file with ending '.muxp.original". When X-Plane starts the adapted mesh will be shown (in case there is no other custom mesh with higher priority in scenery_packs.ini file. Refer to availible documentes and YouTube tutorials how to organize your *scenery_packs.ini* file in the right order, in case you have issues.
+MUXP adapts the dsf-files of X-Plane that do include the mesh information (not the dsf files including overlays or e.g. 
+airport buildings). For the adaption the scenery developer creates a MUXP file (yaml text file) including 
+definitions for the mesh like flattening of a certain area. This MUXP file is submitted e.g. with other scenery files 
+(e.g. new airport) to the user. The user installs scenery as normal. The MUXP file is then processed by this MUXP tool.
+The tool is searching automatically for installed mesh files (such as Ortho, HD Mesh or even already adapted dsf files)
+and the user can decide which one to be updated (however the MUXP file can itself specify which mesh shall be used, so. 
+you might not be asked). 
+Processed default dsf files are stored in the MUXP updated default mesh folder 
+within Custom Scenery. Adapted custom meshes will stay in their Custom Scenery sub-folder and the original custom dsf
+is saved as file with ending '.muxp.original". When X-Plane starts the adapted mesh will be shown (in case there is no 
+other custom mesh with higher priority in scenery_packs.ini file or you did MUXP allow to activate the change
+directly via updating scenery_packs.ini).
 
 ![Functioning Of Muxp](https://github.com/nofaceinbook/muxp/blob/master/doc/images/muxpFunciton.JPG)
 
