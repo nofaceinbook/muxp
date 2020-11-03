@@ -1,12 +1,13 @@
-muxp_version: 0.1
-id: bridge_KLCC
-version: 0.01
+muxp_version: 0.2
+id: bridge_KCLL
+version: 0.02
 description: This muxp file lowers road area and creates bridge just North of KCLL
 author: schmax
 tile: +30-097
 area: 30.5901 30.6110  -96.3713 -96.3535
+source_dsf: DEFAULT
 
-cut_polygon:
+cut_polygon.outer:
    name: outer_end_deep_down
    coordinates:
       - 30.59668697948144 -96.35945112255519
@@ -18,7 +19,7 @@ cut_polygon:
       - 30.59517496796116 -96.3594311417551
       - 30.59668697948144 -96.35945112255519
 
-cut_polygon:
+cut_polygon.inner:
    name: lowered_road
    elevation: 88
    coordinates:
@@ -31,7 +32,7 @@ cut_polygon:
       - 30.59598220438794 -96.36026186681161
       - 30.59647075904987 -96.35981076919239
 
-update_network_elevation:
+update_network_levels:
    coordinates:
       - 30.59958151023221 -96.3670596120072
       - 30.6007532020651 -96.36520263171678
@@ -50,14 +51,14 @@ update_network_elevation:
       - 30.6008527284188 -96.36596689219614
       - 30.59994336798104 -96.36736006479029
       - 30.59958151023221 -96.3670596120072
-	3d_coordinates:
+   road_coords_drapped:
       - 30.60319743944129 -96.36288782652989 1
       - 30.60225063497191 -96.36410634366023 2
       - 30.60142095108261 -96.36516819644824 1
-		- 30.601965 -96.365211 0
-		- 30.603424 -96.363795 0
-		- 30.602214 -96.362883 0
-		- 30.601152 -96.364471 0
-		- 30.603668 -96.362368 0
-		- 30.600669 -96.366005 0
+      - 30.601965 -96.365211 0
+      - 30.603424 -96.363795 0
+      - 30.602214 -96.362883 0
+      - 30.601152 -96.364471 0
+      - 30.603668 -96.362368 0
+      - 30.600669 -96.366005 0
 	

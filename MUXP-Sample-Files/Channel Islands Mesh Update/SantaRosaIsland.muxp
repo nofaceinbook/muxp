@@ -1,10 +1,11 @@
-muxp_version: 0.1
+muxp_version: 0.2
 id: SantaRosaIslandAirstrip
-version: 0.1
+version: 0.2
 description: Updating mesh for Santa Rosa Island Airstrip from Wookie
 author: schmax
 tile: +33-121
 area: 33.98905652350402 33.99945721074937 -120.0547612661419 -120.035463542273
+source_dsf: DEFAULT
 
 cut_polygon.cliff:
     elevation: 22.0

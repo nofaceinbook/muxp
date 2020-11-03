@@ -1,10 +1,11 @@
-muxp_version: 0.1
+muxp_version: 0.2
 id: ConservancyAirfieldWookie
-version: 0.1
+version: 0.2
 description: Updating mesh for Santa Cruz Island Conservancy Airfield from Wookie
 author: schmax
 tile: +33-120
 area: 33.98637750824201 33.99455236656082 -119.6876630134461 -119.6714200819356
+source_dsf: DEFAULT
 
 cut_spline_segment.runway:
     width: 80.0

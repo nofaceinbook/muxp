@@ -1,11 +1,12 @@
-muxp_version: 0.1
+muxp_version: 0.3
 id: airport_0921_Aleu
-version: 1.0
+version: 1.1
 description: Creating Profile for Aleu Altisurface landing strip
 author: sergiosch_schmax
 tile: +42+001
 area: 42.8928  42.9107  1.2592  1.2958
-
+source_dsf: pack=*SpainUHD   DEFAULT
+elevation_step: 0.01
 
 cut_polygon.hill:
    elevation: 1060

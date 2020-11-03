@@ -1,10 +1,11 @@
-muxp_version: 0.1
+muxp_version: 0.2
 id: SanMiguelIslandAirstrip
-version: 0.1
+version: 0.2
 description: Updating mesh for San Miguel Island Airstrip from Wookie
 author: schmax
 tile: +34-121
 area: 34.03390698615984 34.04155934259581 -120.3541321206873 -120.343290779045
+source_dsf: DEFAULT
 
 limit_edges.around_airport:
     edge_limit: 250

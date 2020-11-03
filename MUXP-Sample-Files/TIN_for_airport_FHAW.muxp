@@ -1,0 +1,37 @@
+muxp_version: 0.1
+id: airport_FHAW
+version: 1.0
+description: TIN for Airport Ascension Wideawake Field
+author: schmax
+tile: -08-015
+area: -7.97825311 -7.96163905 -14.40809251 -14.37793147
+source_dsf: DEFAULT
+
+cut_spline_segment.runway:
+   width: 45.72
+   profile_interval: 50
+   terrain: lib/g10/terrain10/crp_wrm_sdry.ter
+   3d_coordinates:
+   - -7.96341006 -14.40605924 -32768
+   - -7.96754049 -14.39780329 -32768
+   - -7.97167092 -14.38954733 -32768
+   - -7.97580135 -14.38129138 -32768
+
+limit_edges.bound_Airport_Boundary:
+   edge_limit: 100
+   coordinates:
+   - -7.97614821 -14.37843147
+   - -7.97286278 -14.38495518
+   - -7.9714763 -14.38426445
+   - -7.96993533 -14.38735553
+   - -7.97015346 -14.39070495
+   - -7.96213905 -14.4069493
+   - -7.96323215 -14.40756916
+   - -7.96887161 -14.40759251
+   - -7.97164528 -14.40182888
+   - -7.96862502 -14.39747738
+   - -7.97775311 -14.37922134
+   - -7.97614821 -14.37843147
+
+unflatten_default_apt:
+   name: FHAW

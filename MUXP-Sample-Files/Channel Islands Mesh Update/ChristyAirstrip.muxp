@@ -1,10 +1,11 @@
-muxp_version: 0.1
+muxp_version: 0.2
 id: ChristyAirstrip
-version: 0.1
+version: 0.2
 description: Updating mesh for Christy airstrip
 author: schmax
 tile: +34-120
 area: 34.0157 34.0211 -119.8598 -119.8458
+source_dsf: DEFAULT
 
 update_raster4spline_segment.airport_profile:
     width: 90
