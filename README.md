@@ -19,8 +19,8 @@ As shonw in this picture you can adapt the mesh e.g. to prepare the terrain for 
 
 
 ## Installation
-Under Windows just [downlaod the executable](https://github.com/nofaceinbook/muxp/releases/download/latest/MUXP_Win64_EXE.zip) and unzip the folder with executalbe MUXP program in your X-Plane Custom Scenery Folder. Done.
-For Mac/Linux you need to download the Python Source Code, install further needed libraries and run it with Python on your computer. The [manual](https://github.com/nofaceinbook/muxp/releases/download/v0.3.0-alpha/MUXP-Manual.pdf) includes more information.
+Under Windows just [downlaod the executable](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP_Win64_EXE.zip) and unzip the folder with executalbe MUXP program in your X-Plane Custom Scenery Folder. Done.
+For Mac/Linux you need to download the Python Source Code, install further needed libraries and run it with Python on your computer. The [manual](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP-Manual.pdf) includes more information.
 
 
 ## Updating Your Mesh
@@ -34,7 +34,7 @@ start/re-start of X-Plane it becomes visible. You can also change this config an
 
 
 ## Manual / Own Mesh Updates
-Much more details on MUXP are included in the [manual](https://github.com/nofaceinbook/muxp/releases/download/v0.3.0-alpha/MUXP-Manual.pdf).
+Much more details on MUXP are included in the [manual](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP-Manual.pdf).
 Especially creation of your own mesh updates requires some learning but the manual includes examples to get you started.
 
 
