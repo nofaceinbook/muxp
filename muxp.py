@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.1 exp"
+muxp_VERSION = "0.3.2 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1261,7 +1261,12 @@ class muxpGUI:
                 xp, yp = [], [] #points for spline to be created
                 for p in c["3d_coordinates"]:
                     xp.append(distance([c["3d_coordinates"][0][1], c["3d_coordinates"][0][0]], [p[1], p[0]])) #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
-                    yp.append(p[2])
+                    if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
+                        yp.append(a.mesh_elevation([p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                        log.info("Assigned magic elevation -99999 at {} to mesh-elevation: {}".format(p[:2], yp[-1]))
+                        #### TBD: In case of no raster use function to get elevation from Tria ######
+                    else:
+                        yp.append(p[2])
                 log.info("Points for spline: {}, {}".format(xp, yp))
                 spline = getspline(xp, yp)
                 log.info("Spline: {}".format(spline))

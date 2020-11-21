@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.0 exp
+# muxp_area.py    Version: 0.3.2 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -107,17 +107,25 @@ class muxpArea:
         # Checking different elevations for same coords
         ############## TBD: SHOULD THIS NOT BE DONE WHEN MATCHING THEM FOR CONVERSION TO DSF #####################
         different_elevations = 0  # assume no differences exist
-        cdict = {}  # set up dictionary with all coords, value is elevation
+        cdict = {}  # set up dictionary with all coords, value is list with max. elevation at first element and
+        # indices-tuples (nt, nv) to all vertices at this coordinates as following elements
         for nt, t in enumerate(self.atrias):
             for nv, v in enumerate(t[:3]):
                 if (round(v[0], 7), round(v[1], 7)) in cdict:
-                    if v[2] != cdict[(round(v[0], 7), round(v[1], 7))]:  # different elevation
-                        self.atrias[nt][nv][2] = cdict[(round(v[0], 7), round(v[1], 7))]  # update elevation of new found to value of first found
+                    current_max_elevation = cdict[(round(v[0], 7), round(v[1], 7))][0]
+                    if v[2] < current_max_elevation:
+                        self.atrias[nt][nv][2] = current_max_elevation
                         different_elevations += 1
+                    elif v[2] > current_max_elevation:  # current elevation is highest
+                        cdict[(round(v[0], 7), round(v[1], 7))][0] = v[2]
+                        for index_tuple in cdict[(round(v[0], 7), round(v[1], 7))][1:]:  # adapt all previous vertices
+                            self.atrias[index_tuple[0]][index_tuple[1]][2] = v[2]
+                        different_elevations += 1
+                    cdict[(round(v[0], 7), round(v[1], 7))].append((nt, nv))
                 else:
-                    cdict[(round(v[0], 7), round(v[1], 7))] = v[2]  # set elevation for these coordinates
+                    cdict[(round(v[0], 7), round(v[1], 7))] = [v[2], (nt, nv)]  # set elevation and index for these coordinates
         if different_elevations:
-            self.log.warning("{} DIFFERING ELEVATIONS at vertices found; updated to first found values".format(different_elevations))
+            self.log.warning("{} DIFFERING ELEVATIONS at vertices found; updated to max. elevation found at each coordinates".format(different_elevations))
             #### tbd to set always on the same value in area, e.g. always highest found  ####
 
         ##### to be continued ##############
@@ -140,6 +148,23 @@ class muxpArea:
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
         return vertices    #returns set of all vertices which ar on coords
 
+    def mesh_elevation(self, p):
+        """
+        Returns elevation of a point = (x, y) in meters calculated based on it's position within the mesh.
+        """
+        for t in self.atrias:
+            a, b = PointLocationInTria(p, [t[0][:2], t[1][:2], t[2][:2]])
+            c = 1 - a - b
+            if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1:  # means p is inside t
+                if t[2][2] < -32767:  # we have raster elevation at least for vertex 2 of tria
+                    elev = []
+                    for i in range(3):
+                        elev.append(self.dsf.getVertexElevation(t[i][0], t[i][1]))
+                    return elev[2] + a * (elev[0] - elev[2]) + b * (elev[1] - elev[2])
+                else:  # no raster elevation
+                    return t[2][2] + a * (t[0][2] - t[2][2]) + b * (t[1][2] - t[2][2])
+        self.log.error("No mesh triangle found where point {} is inside in order to retrieve elevation!".format(p))
+        return None
 
     def replace_vertex_in_poly(self, oldv, newv, poly):
         """
@@ -666,6 +691,7 @@ class muxpArea:
         extract_atrias = []  # list of area trias, that have to be extracted
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         normals = dict()  # dictionary for vertex normals
+        self.log.info("**** EXTRACTED VERTICES FOR OBJ FILE INCLUDING ELEVATIONS AS IS IN MEMORY *****")  ### TESTING ONLY ###
         for t in self.atrias:  # go through all trias in area
             if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
                 if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
@@ -674,6 +700,7 @@ class muxpArea:
                         extract_atrias[-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
                         vc = (round(t[v][0], 7), round(t[v][1], 7))
                         vn = (round(t[v][3], 4), round(t[v][4], 4))
+                        self.log.info("{}  elev: {}".format(vc, t[v][2]))  ### TESTING ONLY ####
                         if vc not in vertices:
                             #vertices[vc] = [t[v][2], len(vertices)]
                             vertices[vc] = [self.dsf.getVertexElevation(*t[v][:3]), len(vertices)]
@@ -945,7 +972,7 @@ class muxpArea:
                                     self.dsf.V[poolID4v][ev_index][2] = v[2] #adapt lower existing vertex elevation with elevation of higher new vertex
                                 else:
                                     v[2] = ev[2] #adapt lower new vertex with elevation of existing higher one
-                                self.log.info("      Now new vertex has elevation {}m and existing {}m.".format(v[2], self.dsf.V[poolID4v][ev_index][2]))
+                                self.log.info("      Now new vertex has elevation {}m".format(self.dsf.V[poolID4v][ev_index][2]))
                                 ### We also need to continue check if same vertex can be used or new vertex has to be created because of different higher coordinates
                                 for i in range(3,len(v)): #check for all planes/coordinates whether they are nearly equal
                                     if abs(ev[i] - v[i]) >= self.dsf.Scalings[poolID4v][i][0] / 65535: #if difference is lower than scale multiplier both coordinates would end up same after endcoding, so they match
@@ -984,7 +1011,7 @@ class muxpArea:
                                 self.dsf.Scalings[-1][2][0] = 32268  # so with this Pool we can reach from -32768 to -500m; above use regular Pool (## 65535 * elevscal caused also rounding issues##)
                                 self.dsf.Scalings[-1][2][1] = -32768  # Off-Set is exact RASTER Elevation (for exact matching), no need to go deeper
                             else: ### Following two lines are else
-                                self.dsf.Scalings[-1][2][0] = 65535 * elevscal #new multiplier based on required scaling for elevation defined for new pool
+                                self.dsf.Scalings[-1][2][0] = int(65535 * elevscal)  # new multiplier based on required scaling for elevation defined for new pool
                                 self.dsf.Scalings[-1][2][1] = int(-500 + int((v[2]+500)/(65535 * elevscal)) * (65535 * elevscal)) #offset for elevation of v   ######## -500m is deepest vaule that can be defined with this routine ####
                         ## Check new scaling for vertex and adapt as required based on multipliers / offsets give
                         scale_checked = False
