@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.0 exp
+# muxp_math.py   Version: 0.3.3 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -43,6 +43,10 @@ def intersection(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects 
         return (round((p1[0] + s0 * (p2[0] - p1[0])), 8), round(p1[1] + s0 * (p2[1] - p1[1]), 8))  ### returns the cutting point as tuple; ROUNDING TO ALWAYS GET SAME POINT 
     else:                    
         return None   ######### Removed () around none on 12.04.2020
+
+def intersect_always(p1, p2, p3, p4):  # returns cutting point of segment p1 to p2 and from p3 to p4 and returns cutting point even if it is outside of sgements
+    s0, t0 = _linsolve_(p2[0] - p1[0], p3[0] - p4[0], p3[0] - p1[0], p2[1] - p1[1], p3[1] - p4[1], p3[1] - p1[1])
+    return (round((p1[0] + s0 * (p2[0] - p1[0])), 8), round(p1[1] + s0 * (p2[1] - p1[1]), 8))  ### returns the cutting point as tuple; ROUNDING TO ALWAYS GET SAME POINT
 
 def intersectionCL(p1, p2, p3, p4):  # checks if segment from p1 to p2 intersects segement from p3 to p4   ### NEW - taken from bflat ###
     #### same as intersection but returns special value in case both segments are collinear
@@ -256,6 +260,25 @@ def segmentToBox(p1, p2, w):
     l.append(l[0]) #add first corner to form closed loop
     return l
 
+
+def cut_box_in_segments(box, segment_length):
+    """
+    Cuts a rectangle box in segments of given length and returns all vertices of new boundary
+    """
+    segment_interval_bound = []  # bound including also vertices for interval steps
+    for corner1, corner2 in [[1, 2], [3, 0]]:
+        interval_steps = int(distance(box[corner1], box[corner2]) / segment_length) + 1
+        interval_vector = [(box[corner2][0] - box[corner1][0]) / interval_steps,
+                           (box[corner2][1] - box[corner1][1]) / interval_steps]
+        segment_interval_bound.append(box[corner1 - 1])  # TBD: Do quicker with extend both values ???
+        segment_interval_bound.append(box[corner1])
+        for i in range(1, interval_steps):  # first and last step not needed as these are corners of segment_bound
+            segment_interval_bound.append(
+                [box[corner1][0] + i * interval_vector[0], box[corner1][1] + i * interval_vector[1]])
+    segment_interval_bound.append(segment_interval_bound[0])  # add first coordinate to get closed poly
+    return segment_interval_bound
+
+
 def gauss_jordan(m, eps = 1.0/(10**10)):
     """Puts given matrix (2D array) into the Reduced Row Echelon Form.
        Returns True if successful, False if 'm' is singular.
@@ -368,7 +391,7 @@ def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline 
     inclination_of_ortho = (lat2y(end[1]) - lat2y(start[1]), lon2x(start[0]) - lon2x(end[0]))  # NEW 04.08.2020 done in Mercartor Projection to keep equal of angle
     orthoStartD = (p[0] - inclination_of_ortho[0], p[1] - inclination_of_ortho[1]) # Start of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
     orthoEndD = (p[0] + inclination_of_ortho[0], p[1] + inclination_of_ortho[1]) # End of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
-    p_centered = intersection(startD, endD, orthoStartD, orthoEndD) #location of p on center line
+    p_centered = intersect_always(startD, endD, orthoStartD, orthoEndD)  # location of p on center line even if it is outside rwy  #### NEW 22.11.20 #####
     d = distance(start, p_centered)
     elev = evalspline(d, rwySpline)
     return elev, d #### d just for TESTING #########
@@ -721,3 +744,67 @@ def earclipTrias(pts):  ###original name of function was triangulate
             a = a[::-1]
         tri.append(a)
     return tri
+
+
+def stretch_poly(poly, width):
+    """
+    Creates a polygon of same shape, but with boundary 'width' meters stretched (if width is negative it will be inside
+    the given polygon. Preferable the polygon is convex. Works also for concave polygons as long it will not cut
+    itself (so to be used with care).
+    WARNING: FUNCTION CURRENTLY FOR POLY WHERE FIRST POINT IN LIST IS NOT EQUAL TO LAST !! ###
+    """
+    def dot_product(v1, v2):
+        return sum((a*b) for a, b in zip(v1, v2))
+
+    def length(v):
+        return sqrt(dot_product(v, v))
+
+    def cos_angle(v1, v2):  # returns co-sinus value of angle between v1 and v2 BUT NOT LOWER THAN 0.2
+        length_prod = length(v1) * length(v2)
+        if length_prod == 0:
+            print("ERROR: Vector with zero length in stretch_poly / cos_angle")
+            return 1  # avoid error
+        result = dot_product(v1, v2) / length_prod
+        if abs(result) > 0.2:
+            return result
+        print("WARNING: Poly with sharp edde, limited extension")
+        return 0.2  # avoid too small values that would extend poly at sharp edges more thant 5 * width
+
+    def normalize(v):  # normalizes vector v
+        length_v = length(v)
+        if length_v == 0:
+            print("ERROR: Vector with zero length in stretch_poly / normalize")
+            return v  # avoid error
+        invert_length = 1 / length(v)
+        return [invert_length * v[0], invert_length * v[1]]
+
+    if not IsClockwise(poly):
+        poly.reverse()
+
+    first_and_last_vertex_identical = False
+    if poly[0][0] == poly[-1][0] and poly[0][1] == poly[-1][1]:
+        first_and_last_vertex_identical = True
+        del poly[-1]
+
+    stretched_poly = []  # stretched poly to be returned
+    n = len(poly)
+    for i in range(n):  # creates for each vertex q the one of stretched poly dependent on vertex p before and r after q
+        # all calculations below are done in Mercator's projection, to get right angles
+        p = [lon2x(poly[(i - 1) % n][0]), lat2y(poly[(i - 1) % n][1])]
+        q = [lon2x(poly[i][0]), lat2y(poly[i][1])]
+        r = [lon2x(poly[(i + 1) % n][0]), lat2y(poly[(i + 1) % n][1])]
+        pqn = normalize([q[0] - p[0], q[1] - p[1]])
+        rqn = normalize([q[0] - r[0], q[1] - r[1]])
+        norm_q = [pqn[0] + rqn[0], pqn[1] + rqn[1]]  # vertex normal on q dependent on p and r
+        if abs(norm_q[0]) < 0.0001 and abs(norm_q[1]) < 0.0001:  # normal is zero vector
+            norm_q = [-pqn[1], pqn[0]]  # set vertex normal in that case to left orthogonal of vector pq on q
+        qn = normalize(norm_q)  # normalize length on vertex normal on q
+        pqno = [-pqn[1], pqn[0]]  # left orthogonal of vector pq on q
+        edge_extent = width / cos_angle(pqno, qn)  # the edges of stretched poly are parallel in distance width but
+        # edges needs to be extend further in order to keep them parallel
+        stretched_poly.append([x2lon(q[0] + edge_extent*qn[0]), y2lat(q[1] + edge_extent*qn[1])])
+
+    if first_and_last_vertex_identical:
+        poly.append(poly[0])
+        stretched_poly.append(stretched_poly[0])
+    return stretched_poly

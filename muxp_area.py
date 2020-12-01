@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.2 exp
+# muxp_area.py    Version: 0.3.3 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -156,7 +156,7 @@ class muxpArea:
             a, b = PointLocationInTria(p, [t[0][:2], t[1][:2], t[2][:2]])
             c = 1 - a - b
             if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1:  # means p is inside t
-                if t[2][2] < -32767:  # we have raster elevation at least for vertex 2 of tria
+                if t[0][2] < -32767 or t[1][2] < -32767 or t[2][2] < -32767:  # we have raster elevation at a vertex
                     elev = []
                     for i in range(3):
                         elev.append(self.dsf.getVertexElevation(t[i][0], t[i][1]))
@@ -437,8 +437,7 @@ class muxpArea:
 
             if not p_inside_one_tria: #if p is inside one tria, no PolyCutPoly required
                 o, i, b = self.PolyCutPoly(tria, p)
-                outer.extend(o), inner.extend(i), border.extend(b) 
-
+                outer.extend(o), inner.extend(i), border.extend(b)
             if PointInPoly(tria[0], p) and PointInPoly(tria[1], p) and PointInPoly(tria[2], p): #special case that tria lies completely in p
                 if keepInnerTrias: #new 11.04.2020 if tria is completely within in t and inner trias should be removed, we need to define this here
                     if elev != None: #if elevation should be adapted do this for inner trias
@@ -460,7 +459,7 @@ class muxpArea:
                         for e in range(3):
                             new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
                             ############# TBD: Elevation change probably not required here, because it will always be set via border vertices later ?!? ==> NO!! See inner trias above! #########################
-                            if elev != None: ### actually only for inner + border_v !!!!!!!!!!!!!!!!! ### 
+                            if elev != None: ### actually only for inner + border_v !!!!!!!!!!!!!!!!! ###
                                 new_v[e][2] = elev
                         new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
 
@@ -491,7 +490,7 @@ class muxpArea:
                 self.log.info("   was already removed...")
         
         ########### TBD: Better set elevation outside, to also distinguish there for profile elevation ... #######################
-        if elev != None: #Adapt elevevation of border vertices 
+        if elev != None: #Adapt elevevation of border vertices
             for v in self.getAllVerticesForCoords(border):
                 v[2] = elev
                 
@@ -1165,4 +1164,96 @@ class muxpArea:
                 self.log.error("          REMOVED TRIA ABOVE ALREADY HAVING ELEVATION")
             if ot in self.atrias: ###### NEW 05.04.2020 ############## WHY REQUIRED after setting relative_mindist from 0.001 to 0.00001??? NOW STILL REQUIRE ??? ############
                 self.atrias.remove(ot) #update area trias by by removing trias that are replaced by new ones
-        return new_trias #### JUST FOR TESTING ######## TO BE REMOVED !!! ###################
+        return
+
+    def assign_spline_elevation(self, spline_points, vertices, place_holder_removal=0):
+        """
+        Assigns for all vertices (x, y) the elevation defined by a spline going through the spline points (x, y, elev)
+        The elevation for a vertex v assigned depends where the orthogonal line of from first to last spline_point
+        going through v cuts this spline line
+        If a place_holder value other than 0 is given, all vertices in self.atrias having this placholder elevation
+        will also be assigned the spline elevation.
+        """
+        xp, yp = [], []  # points for spline to be created
+        for p in spline_points:
+            xp.append(distance([spline_points[0][1], spline_points[0][0]], [p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
+            if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
+                yp.append(self.mesh_elevation([p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                self.log.info("Assigned magic elevation -99999 at {} to mesh-elevation: {}".format(p[:2], yp[-1]))
+            else:
+                yp.append(p[2])
+        self.log.info("Points for spline: {}, {}".format(xp, yp))
+        spline = getspline(xp, yp)
+        self.log.info("Spline: {}".format(spline))
+        if len(vertices):
+            for vertex in self.getAllVerticesForCoords(vertices):  # set vertices of intervals to correct elevation
+                elev, distSplineLine = interpolatedSegmentElevation([spline_points[0], spline_points[-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
+                self.log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
+                vertex[2] = elev
+        if place_holder_removal:
+            for nt, t in enumerate(self.atrias):
+                for v in range(3):
+                    if t[v][2] == place_holder_removal:  # adapt all marked vertices with elev. from position on ramp
+                        self.log.info("Getting elevation for: {}".format(t[v][:2]))  ##### TO BE REMOVED ###
+                        elev, distSplineLine = interpolatedSegmentElevation([spline_points[0], spline_points[-1]], t[v][:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
+                        self.log.info("Assigning Spline Elevation for {}  to  {} m at distance {}".format(t[v][:2], elev, distSplineLine))  ########### TESTING ONLY ############
+                        t[v][2] = elev
+
+
+    def smooth_elevation_around_poly(self, poly, elevation, dist):
+        """
+         Smoothens the elevation around polygon of given elevation within distance
+         """
+        del poly[-1]  # first = last point not needed for following calculations
+        stretched_poly = stretch_poly(poly, dist)
+
+        if dist == 0:
+            self.log.error("Given distance must not be zero!")
+            return []
+
+        for t in self.atrias:
+            for v in t[:3]:
+                for i in range(len(poly)):
+                    i_next = (i + 1) % len(poly)
+                    base_i, inside_i = PointLocationInTria(v, [stretched_poly[i_next], poly[i], stretched_poly[i]])
+                    if 0 <= base_i <= 1 and 0 <= inside_i <= 1:
+                        base_in, inside_in = PointLocationInTria(v, [stretched_poly[i], poly[i_next], stretched_poly[i_next]])
+                        if 0 <= base_in <= 1 and 0 <= inside_in <= 1:
+                            base_dist = (base_i + 1 - base_in) / 2
+                            base_v = [stretched_poly[i][0] + base_dist*(stretched_poly[i_next][0] - stretched_poly[i][0]), stretched_poly[i][1] + base_dist*(stretched_poly[i_next][1] - stretched_poly[i][1])]
+                            elev_base_v = self.mesh_elevation(base_v)
+                            base_dist = min(distance(base_v, v), dist)
+                            self.log.info("Elevation at base {} for {} in distance {} is: {}".format(base_v, v[:2], base_dist, elev_base_v))
+                            v[2] = elev_base_v + (base_dist/dist) * (elevation - elev_base_v)
+                            self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+
+        poly.append(poly[0])  # set again first and last point equal
+        stretched_poly.append(stretched_poly[0])
+        return stretched_poly
+
+
+    def smooth_elevation_around_poly_quick(self, poly, elevation, dist):
+        """
+        Smoothens the elevation around polygon of given elevation within distance
+        """
+        del poly[-1]  # first = last point not needed for following calculations
+        stretched_poly = stretch_poly(poly, dist)
+        dist_elev = []  # elevation of vertices of stretched poly
+        for v in stretched_poly:
+            dist_elev.append(self.mesh_elevation(v))
+            self.log.info("Mesh elevation at {} is: {}".format(v, dist_elev[-1]))
+        for t in self.atrias:
+            for v in t[:3]:
+                for i in range(len(poly)):
+                    i_next = (i+1) % len(poly)
+                    a, b = PointLocationInTria(v, [poly[i], stretched_poly[i], stretched_poly[i_next]])
+                    if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= 1 - a - b <= 1:
+                        v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (dist_elev[i] - dist_elev[i_next])
+                        self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+                    a, b = PointLocationInTria(v, [poly[i], poly[i_next], stretched_poly[i_next]])
+                    if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= 1 - a - b <= 1:
+                        v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (elevation - dist_elev[i_next])
+                        self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+        poly.append(poly[0])  # set again first and last point equal
+        stretched_poly.append(stretched_poly[0])
+        return stretched_poly

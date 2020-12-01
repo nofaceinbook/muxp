@@ -1,4 +1,4 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.3
+SUPPORTED_MUXP_FILE_VERSION = 0.33
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 
@@ -10,6 +10,8 @@ MUXP_COMMANDS = (
     "cut_ramp",
     "cut_flat_terrain_in_mesh",
     "cut_spline_segment",
+    "cut_strip",
+    "cut_spline_poly"
     "update_network_levels",
     "limit_edges",
     "update_raster_elevation",
@@ -28,13 +30,17 @@ MUXP_PARAMS = (
     "include_raster_square_criteria",
     "edge_limit",
     "width",
-    "profile_interval"
+    "profile_interval",
+    "type",
+    "distance"
 )
 
 MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],
                            "cut_ramp": ["coordinates", "3d_coordinates"],
                            "cut_flat_terrain_in_mesh": ["coordinates", "terrain", "elevation"],
                            "cut_spline_segment": ["3d_coordinates", "terrain", "width", "profile_interval"],
+                           "cut_strip": ["coordinates", "3d_coordinates", "terrain", "width", "profile_interval"],
+                           "cut_spline_poly": ["coordinates", "3d_coordinates"],
                            "update_network_levels": ["coordinates", "road_coords_drapped"],
                            "limit_edges": ["coordinates", "edge_limit"],
                            "update_raster_elevation": ["coordinates", "elevation"],
@@ -53,11 +59,14 @@ PARAMETER_TYPES = {"command": ["string"],  # this is just command-type
                    "include_raster_square_criteria": ["string"],
                    "edge_limit": ["int"],
                    "profile_interval": ["float"],
-                   "width": ["float"]}
+                   "width": ["float"],
+                   "type": ["string"],
+                   "distance": ["float"]}
 
 OPTIONAL_PARAMETER_SETTING = {"elevation": None,
                               "name": "",
-                              "include_raster_square_criteria": "corner_inside"}  # IF Parmeter is not given for command, the value in this dict is assigned
+                              "include_raster_square_criteria": "corner_inside",
+                              "type": "default"}  # IF Parmeter is not given for command, the value in this dict is assigned
 
 LIST_TYPES = {"coordinates": ["float", "float"],  # currently just float and int supported, everything else is string
               "3d_coordinates": ["float", "float", "float"],

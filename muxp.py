@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.2 exp"
+muxp_VERSION = "0.3.3 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -760,6 +760,8 @@ class muxpGUI:
         radio_TIN.grid(row=2, column=2, sticky=W)
         radio_flatten = Radiobutton(create_win, text="flatten", variable=create_mesh_type, value="flatten")
         radio_flatten.grid(row=2, column=3, sticky=W)
+        radio_strip = Radiobutton(create_win, text="strip", variable=create_mesh_type, value="strip")
+        radio_strip.grid(row=2, column=4, sticky=W)
         radio_TIN.select()
         aptfile_label = Label(create_win, text="apt.dat file:")
         aptfile_label.grid(row=3, column=0, pady=4, sticky=E)
@@ -1180,14 +1182,29 @@ class muxpGUI:
                 
             if c["command"] == "cut_polygon":
                 ###### tbd: support further values like terrain and accuracy ####################
-                polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], c["elevation"]) 
+                if c["elevation"] == -99999:
+                    polysouter, polysinner, borderv = a.CutPoly(c["coordinates"])
+                    log.info("Cut with magic elevation, so no elevation changes when cutting....")
+                else:
+                    polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], c["elevation"])
                 log.info("Outer Polys returned from cut: {}".format(polysouter))
                 log.info("Inner Polys returned from cut: {}".format(polysinner))
                 log.info("Border returned from cut: {}".format(borderv))
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
-                shown_polys.append(c["coordinates"]) 
+                shown_polys.append(c["coordinates"])
+                if c["type"] == "smooth" or c["type"] == "double_cut":
+                    if "distance" in c:
+                        d = c["distance"]
+                    else:
+                        d = 20.0
+                    if c["type"] == "double_cut":
+                        polysouter, polysinner, borderv = a.CutPoly(stretch_poly(c["coordinates"], d))
+                    stretched_poly = a.smooth_elevation_around_poly(c["coordinates"], c["elevation"], d)
+                    log.info(
+                        "Cutting with smoothing in distance {} returned stretched poly: {}".format(d, stretched_poly))
+                    shown_polys.append(stretched_poly)
                 if self.kmlExport:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
 
@@ -1242,62 +1259,65 @@ class muxpGUI:
                 log.info("Cutting segment as spline for the following elevation profile: {} m".format(c["3d_coordinates"]))
                 segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"])  # box around first and last vertex with width
                 log.info("Box around runway is: {}".format(segment_bound))
-                segment_interval_bound = [] #bound including also vertices for interval steps
-                for corner1, corner2 in [[1,2], [3,0]]:
-                    interval_steps = int(distance(segment_bound[corner1], segment_bound[corner2]) /  c["profile_interval"]) + 1
-                    interval_vector = [(segment_bound[corner2][0] - segment_bound[corner1][0]) / interval_steps, (segment_bound[corner2][1] - segment_bound[corner1][1]) / interval_steps]
-                    segment_interval_bound.append(segment_bound[corner1-1]) #TBD: Do quicker with extend both values ???
-                    segment_interval_bound.append(segment_bound[corner1])
-                    for i in range(1,interval_steps): #first and last step not needed as these are corners of segment_bound
-                        segment_interval_bound.append([segment_bound[corner1][0] + i * interval_vector[0],  segment_bound[corner1][1] + i * interval_vector[1]])
-                segment_interval_bound.append(segment_interval_bound[0]) #add first coordinate to get closed poly
+                segment_interval_bound = cut_box_in_segments(segment_bound, c["profile_interval"])
                 polysouter, polysinner, borderv = a.CutPoly(segment_interval_bound, None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
                 a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0, "segment_intervals") #for first step take default elevation -32768 for raster, will be changed below, create trias as "segment_intervals"
-                #log.info("BORDER VERTICES: {}".format(borderv))
-                #split_trias = [] ## SPLIT TRIAS JUST FOR TESTING --> TO BE REMOVED
-                for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
-                    new_split = a.splitCloseEdges(vertex)   #### assigning split trias is just for testing --> Just call splitCloseEdges; remove split_trias; also definition above !!!! ##################
-                #    if len(new_split) > 0: split_trias.extend(new_split)  ### to be removed after testing ###
-                xp, yp = [], [] #points for spline to be created
-                for p in c["3d_coordinates"]:
-                    xp.append(distance([c["3d_coordinates"][0][1], c["3d_coordinates"][0][0]], [p[1], p[0]])) #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
-                    if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
-                        yp.append(a.mesh_elevation([p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!
-                        log.info("Assigned magic elevation -99999 at {} to mesh-elevation: {}".format(p[:2], yp[-1]))
-                        #### TBD: In case of no raster use function to get elevation from Tria ######
-                    else:
-                        yp.append(p[2])
-                log.info("Points for spline: {}, {}".format(xp, yp))
-                spline = getspline(xp, yp)
-                log.info("Spline: {}".format(spline))
-                for vertex in a.getAllVerticesForCoords(segment_interval_bound): #set vertices of intervals to correct elevation
-                    elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
-                    log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
-                    vertex[2] = elev
-                log.info("=== Now assigning spline elevation for borderv ===")
-                for vertex in a.getAllVerticesForCoords(borderv): #set borderv to correct elevation
-                    elev, distSplineLine = interpolatedSegmentElevation([c["3d_coordinates"][0], c["3d_coordinates"][-1]], vertex[:2], spline)   #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
-                    log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
-                    vertex[2] = elev
-                #elevation_scale = 0.05  # is now default value and configurable in MUXP File
+
+                for vertex in borderv:  # insert in mesh for poly also vertices from surrounding mesh on the border
+                    a.splitCloseEdges(vertex)
+
+                a.assign_spline_elevation( c["3d_coordinates"], segment_interval_bound + borderv)
+
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first
-                #shown_polys = [] ####### THIS IS JUST FOR CHECKING WHERE SPLIT TRIAS ARE: TO BE REMOVED ############
-                #log.info("SPLIT TRIAS: {}".format(split_trias))
-                #for t in split_trias:
-                #    pol = []
-                #    log.info("current t: {}".format(t))
-                #    for e in range(3):
-                #        pol.append(t[e][:2])
-                #    pol.append(pol[0]) #closed poly
-                #    shown_polys.append(pol)
                 shown_polys.append(segment_bound) 
                 if self.kmlExport:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
-                ######### MAKE SURE THAT VERTICES ARE CREATED ON 5CM OPTION !!!!! ####################
-                
-                    
+
+            if c["command"] == "cut_spline_poly":
+                log.info("Cutting poly with spline elevation profile: {} m".format(c["3d_coordinates"]))
+                for p in c["3d_coordinates"]:  # MAGIC elevation needs to be replaced before placeholder elevation is assigned
+                    if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
+                        p[2] = a.mesh_elevation([p[1], p[0]])  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                        log.info("Assigned magic elevation -99999 at {} to: {}".format(p[:2], p[2]))
+                elev_placeholder = 333333  # first set this elevation to all cut vertices and then replace by spline
+                polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], elev_placeholder)
+                a.assign_spline_elevation(c["3d_coordinates"], [], elev_placeholder)
+                shown_polys = polysouter
+                for pol in shown_polys:
+                    pol.append(pol[0])  # polys are returned without last vertex beeing same as first
+                shown_polys.append(c["coordinates"])
+                if self.kmlExport:
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
+
+            if c["command"] == "cut_strip":
+                log.info("Cutting strip with spline elevation profile: {} m".format(c["3d_coordinates"]))
+                for p in c["3d_coordinates"]:  # MAGIC elevation needs to be replaced before placeholder elevation is assigned
+                    if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
+                        p[2] = a.mesh_elevation([p[1], p[0]])  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                        log.info("Assigned magic elevation -99999 at {} to: {}".format(p[:2], p[2]))
+                elev_placeholder = 333333  # first set this elevation to all cut vertices and then replace by spline
+                polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], elev_placeholder)
+
+                segment_bound = segmentToBox(c["3d_coordinates"][0], c["3d_coordinates"][-1], c["width"])  # box around first and last vertex with width
+                log.info("Box around runway is: {}".format(segment_bound))
+                segment_interval_bound = cut_box_in_segments(segment_bound, c["profile_interval"])
+                polysouter, polysinner, borderv = a.CutPoly(segment_interval_bound, None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
+                a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0, "segment_intervals") #for first step take default elevation -32768 for raster, will be changed below, create trias as "segment_intervals"
+
+                for vertex in borderv:  # insert in mesh for poly also vertices from surrounding mesh on the border
+                    a.splitCloseEdges(vertex)
+
+                a.assign_spline_elevation(c["3d_coordinates"], segment_interval_bound + borderv, elev_placeholder)
+                shown_polys = polysouter
+                for pol in shown_polys:
+                    pol.append(pol[0])  # polys are returned without last vertex beeing same as first
+                shown_polys.append(c["coordinates"])
+                shown_polys.append(segment_bound)
+                if self.kmlExport:
+                    kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
+
             if c["command"] == "limit_edges":
                 a.limitEdges(c["coordinates"], c["edge_limit"])
                 log.info("Edges in area have been limited")

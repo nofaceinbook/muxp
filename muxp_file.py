@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.3.0 exp
+# muxp_file.py    Version: 0.3.3 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -534,13 +534,15 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
     muxp_filename = muxpfolder + "/automuxed_airport_" + icao_id + ".muxp"
     log.info("Creating for mesh type: {}  muxp-string for file: {}".format(meshtype, muxp_filename))
 
-    muxp.append("muxp_version: 0.1\n")
+    muxp.append("muxp_version: 0.32\n")
     muxp.append("id: airport_{}\n".format(icao_id))
     muxp.append("version: 1.0\n")
     if meshtype == "TIN":
         muxp.append("description: creating TIN for {}\n".format(apt_name))
     elif meshtype == "flatten":
         muxp.append("description: flattening of {}\n".format(apt_name))
+    elif meshtype == "strip":
+        muxp.append("description: creating landing strip for {}\n".format(apt_name))
     else:
         log.error("Creation of muxp file for undefined meshtype {} not possible!".format(meshtype))
         return None, "Undefined mesh type requested!"
@@ -555,9 +557,9 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
 
     for n, b in enumerate(bounds):
         muxp.append("\n")
-        if meshtype == "TIN":
+        if meshtype == "TIN" or meshtype == "strip":
             muxp.append("limit_edges.{}:\n".format(bound_names[n]))
-            muxp.append("   edge_limit: 100\n")
+            muxp.append("   edge_limit: 250\n")
         else:  # flatten
             muxp.append("cut_polygon.{}:\n".format(bound_names[n]))
             muxp.append("   elevation: {}\n".format(apt_elev))
@@ -567,21 +569,28 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
 
     for n, r in enumerate(runways):
         muxp.append("\n")
-        if meshtype == "TIN":
+        if meshtype == "TIN" or (meshtype == "strip" and n == 0):  # for strip only one / first runway supported:
             rwy_vec = ((r[1][0] - r[0][0])/3, (r[1][1] - r[0][1])/3)  # vector for 1/3rd of rwy
-            muxp.append("cut_spline_segment.runway_{}:\n".format(n))
+            if meshtype == "TIN":
+                muxp.append("cut_spline_segment.runway_{}:\n".format(n))
+            elif meshtype == "strip":
+                muxp.append("cut_strip.boundary_0_and_runway_0:\n")
             muxp.append("   width: {}\n".format(r[2]))
             muxp.append("   profile_interval: 50\n   terrain: lib/g10/terrain10/apt_tmp_dry.ter\n")
             muxp.append("   3d_coordinates:\n")
-            muxp.append("   - {} {} -32768\n".format(r[0][0], r[0][1]))
-            muxp.append("   - {} {} -32768\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
-            muxp.append("   - {} {} -32768\n".format(r[0][0] + 2 * rwy_vec[0], r[0][1] + 2 * rwy_vec[1]))
-            muxp.append("   - {} {} -32768\n".format(r[1][0], r[1][1]))
-        else:  # flatten
+            muxp.append("   - {} {} -99999\n".format(r[0][0], r[0][1]))
+            muxp.append("   - {} {} -99999\n".format(r[0][0] + rwy_vec[0], r[0][1] + rwy_vec[1]))
+            muxp.append("   - {} {} -99999\n".format(r[0][0] + 2 * rwy_vec[0], r[0][1] + 2 * rwy_vec[1]))
+            muxp.append("   - {} {} -99999\n".format(r[1][0], r[1][1]))
+        elif meshtype == "flatten":
             muxp.append("cut_polygon.runway_{}:\n".format(n))
             muxp.append("   elevation: {}\n".format(apt_elev))
             muxp.append("   coordinates:\n")
             for v in segmentToBox(r[0], r[1], r[2]):
+                muxp.append("   - {} {}\n".format(v[1], v[0]))
+        if meshtype == "strip" and n == 0:  # for strip only one / first runway supported
+            muxp.append("   coordinates:\n")
+            for v in bounds[0]:
                 muxp.append("   - {} {}\n".format(v[1], v[0]))
 
     if apt_flatten:  # flatten_flag set
