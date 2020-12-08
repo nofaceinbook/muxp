@@ -3,6 +3,7 @@
 # with allowance by it's author Nicola Marangon
 #
 # It allows conversion from MUXP to WED and back
+# This version is compatible with MUXP File version 0.34
 #################################################################################################
 
 import yaml
@@ -205,7 +206,7 @@ class MUXP(object):
 
             if ':' in wed_command and o['@class'] == 'WED_ObjPlacement':
                 key, value = wed_command.split(':')
-                if key in ('muxp_version', 'elevation', 'width', 'profile_interval', ):  # schmax removed 'version' from list as MUXP is keeping this as string and to avoid that 1.0 is converted to 1
+                if key in ('muxp_version', 'elevation', 'width', 'profile_interval', 'distance'):  # schmax removed 'version' from list as MUXP is keeping this as string and to avoid that 1.0 is converted to 1
                     if float(value) == int(float(value)):
                         cmd_yaml[key] = int(float(value))
                     else:

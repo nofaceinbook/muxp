@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.3 exp
+# muxp_area.py    Version: 0.3.4 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -148,14 +148,15 @@ class muxpArea:
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
         return vertices    #returns set of all vertices which ar on coords
 
-    def mesh_elevation(self, p):
+    def mesh_elevation(self, p, epsilon=0.0001):
         """
         Returns elevation of a point = (x, y) in meters calculated based on it's position within the mesh.
+        epsilon is the allowed tolerance in percent to count p inside tria, default is 0.01 percent
         """
         for t in self.atrias:
             a, b = PointLocationInTria(p, [t[0][:2], t[1][:2], t[2][:2]])
             c = 1 - a - b
-            if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1:  # means p is inside t
+            if -epsilon <= a <= 1 + epsilon and -epsilon <= b <= 1 + epsilon and -epsilon <= c <= 1 + epsilon:  # means p is inside t
                 if t[0][2] < -32767 or t[1][2] < -32767 or t[2][2] < -32767:  # we have raster elevation at a vertex
                     elev = []
                     for i in range(3):
@@ -1199,13 +1200,16 @@ class muxpArea:
                         self.log.info("Assigning Spline Elevation for {}  to  {} m at distance {}".format(t[v][:2], elev, distSplineLine))  ########### TESTING ONLY ############
                         t[v][2] = elev
 
-
-    def smooth_elevation_around_poly(self, poly, elevation, dist):
+    def smooth_elevation_around_poly(self, poly, elevation, dist, probe_inner_vertex=False, error_rate=0.01):
         """
          Smoothens the elevation around polygon of given elevation within distance
+         In case probe_inner_vertex = True the elevation inside is probed and elevation value ignored
+         error rate is the percentage which is considered to be outer edge (=base) and not be somoothed, or
+         inner edge considered to get just elevation.
          """
         del poly[-1]  # first = last point not needed for following calculations
         stretched_poly = stretch_poly(poly, dist)
+        # stretched poly returns vertices ordered clockwise, important below for orthogonal vector to inside
 
         if dist == 0:
             self.log.error("Given distance must not be zero!")
@@ -1216,25 +1220,49 @@ class muxpArea:
                 for i in range(len(poly)):
                     i_next = (i + 1) % len(poly)
                     base_i, inside_i = PointLocationInTria(v, [stretched_poly[i_next], poly[i], stretched_poly[i]])
-                    if 0 <= base_i <= 1 and 0 <= inside_i <= 1:
+                    if 0 < base_i < 1 and 0 + error_rate < inside_i < 1:
                         base_in, inside_in = PointLocationInTria(v, [stretched_poly[i], poly[i_next], stretched_poly[i_next]])
-                        if 0 <= base_in <= 1 and 0 <= inside_in <= 1:
+                        if 0 <= base_in <= 1 and 0 + error_rate < inside_in < 1 - error_rate:
                             base_dist = (base_i + 1 - base_in) / 2
                             base_v = [stretched_poly[i][0] + base_dist*(stretched_poly[i_next][0] - stretched_poly[i][0]), stretched_poly[i][1] + base_dist*(stretched_poly[i_next][1] - stretched_poly[i][1])]
+                            inner_v = [poly[i][0] + base_dist*(poly[i_next][0] - poly[i][0]), poly[i][1] + base_dist*(poly[i_next][1] - poly[i][1])]
+                            if probe_inner_vertex:
+                                #ortho_to_inside = [poly[i_next][1] - poly[i][1], -(poly[i_next][0] - poly[i][0])]
+                                #f = 1 / distance(inner_v, [inner_v[0] + ortho_to_inside[0], inner_v[1] + ortho_to_inside[1]])
+                                ## go 1m to the inside of poly to get really elevation of inside the poly and not outside
+                                #elev_inner_v = self.mesh_elevation([inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]])
+                                #self.log.info("Inner Point: {}  Elevation from: {}".format(inner_v, [inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]]))
+                                elev_inner_v = self.mesh_elevation(inner_v)
+                            else:
+                                elev_inner_v = elevation
                             elev_base_v = self.mesh_elevation(base_v)
-                            base_dist = min(distance(base_v, v), dist)
-                            self.log.info("Elevation at base {} for {} in distance {} is: {}".format(base_v, v[:2], base_dist, elev_base_v))
-                            v[2] = elev_base_v + (base_dist/dist) * (elevation - elev_base_v)
+                            base_inner_ratio = min(distance(base_v, v) / distance(base_v, inner_v), 1)  # maximum ratio shall be 1
+                            self.log.info("Elevation at base {} for {} in distance_ratio {} is: {} (elevation inside at {}  : {})".format(base_v, v[:2], base_inner_ratio, elev_base_v, inner_v, elev_inner_v))
+                            v[2] = elev_base_v + base_inner_ratio * (elev_inner_v - elev_base_v)
                             self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+                        elif 1 - error_rate <= inside_i < 1 and 1 - error_rate <= inside_in < 1:
+                            # we are close to edge of poly so we just take elevation at poly
+                            if probe_inner_vertex:
+                                inner_dist, outside = PointLocationInTria(v, [poly[i_next], stretched_poly[i], poly[i]])
+                                inner_v = [poly[i][0] + inner_dist * (poly[i_next][0] - poly[i][0]),
+                                           poly[i][1] + inner_dist * (poly[i_next][1] - poly[i][1])]
+                                #ortho_to_inside = [poly[i_next][1] - poly[i][1], -(poly[i_next][0] - poly[i][0])]
+                                #f = 1 / distance(inner_v, [inner_v[0] + ortho_to_inside[0], inner_v[1] + ortho_to_inside[1]])
+                                ### go 1m to the inside of poly to get really elevation of inside the poly and not outside
+                                #v[2] = self.mesh_elevation([inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]])
+                                #self.log.info("Point {} very close to poly! Inner Point: {}  Elevation from: {} is: {}".format(v[:2], inner_v, [inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]], v[2]))
+                                v[2] = self.mesh_elevation(inner_v)
+                            else:
+                                v[2] = elevation
 
         poly.append(poly[0])  # set again first and last point equal
         stretched_poly.append(stretched_poly[0])
         return stretched_poly
 
-
-    def smooth_elevation_around_poly_quick(self, poly, elevation, dist):
+    def smooth_elevation_around_poly_quick(self, poly, elevation, dist):  ##### currently not in use #####
         """
         Smoothens the elevation around polygon of given elevation within distance
+        Uses elevation only at edges of poly and stretched poly
         """
         del poly[-1]  # first = last point not needed for following calculations
         stretched_poly = stretch_poly(poly, dist)
@@ -1247,13 +1275,71 @@ class muxpArea:
                 for i in range(len(poly)):
                     i_next = (i+1) % len(poly)
                     a, b = PointLocationInTria(v, [poly[i], stretched_poly[i], stretched_poly[i_next]])
-                    if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= 1 - a - b <= 1:
+                    if 0 < a < 1 and 0 < b < 1 and 0 < 1 - a - b < 1:
                         v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (dist_elev[i] - dist_elev[i_next])
                         self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
                     a, b = PointLocationInTria(v, [poly[i], poly[i_next], stretched_poly[i_next]])
-                    if 0 <= a <= 1 and 0 <= b <= 1 and 0 <= 1 - a - b <= 1:
+                    if 0 < a < 1 and 0 < b < 1 and 0 < 1 - a - b < 1:
                         v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (elevation - dist_elev[i_next])
                         self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
         poly.append(poly[0])  # set again first and last point equal
         stretched_poly.append(stretched_poly[0])
         return stretched_poly
+
+    def smooth_cut(self, c, poly, elevation=None):
+        """
+        Performs smoothing around poly according to given parameters in command c
+        In case elevation is given, this counts for the polygon otherwise elevation at polygon is probed.
+        Returns the polygon in which smoothing was performed
+        """
+
+        if c["type"] == "smooth" or c["type"] == "double_cut":
+            if "distance" in c:
+                d = c["distance"]
+            else:
+                d = 20.0
+            self.log.info("Smoothing type: {} with distance: {} for poly: {}".format(c["type"], d, poly))
+            if c["type"] == "double_cut":
+                stretched_poly = stretch_poly(poly, d)
+                polysouter, polysinner, borderv = self.CutPoly(stretched_poly)
+                for box_edge in range(4):
+                    ecps = self.cutEdges(poly[box_edge], stretched_poly[box_edge])
+                    # OPEN: Perform that cut only for smoothing ????
+            if elevation == None:
+                stretched_poly = self.smooth_elevation_around_poly(poly, None, d, True)
+            else:
+                stretched_poly = self.smooth_elevation_around_poly(poly, elevation, d)
+            self.log.info(
+                "Smoothing ended inside stretched poly: {}".format(stretched_poly))
+            return stretched_poly
+        else:
+            self.log.error("Unknown type: {}  used in command. Ignored.".format(c["type"]))
+            return []
+
+    def set_path_elevation(self, coords, left, right, elev):
+        """
+        For a path given by coordinates including left and right points to have width of the path and
+        elevation give, adapts the elevation for points that are on this path dependent on these elevation points.
+        """
+        for t in self.atrias:
+            for v in t[:3]:
+                if v[2] == 333333:  # elevation placeholder
+                    for i in range(len(coords)-1):
+                        ortho_point = [coords[i][0]+coords[i+1][1]-coords[i][1], coords[i][1]+coords[i][0]-coords[i+1][0]]
+                        line_dist, inside = PointLocationInTria(v, [coords[i+1], ortho_point, coords[i]])
+                        if line_dist <= 0:  # point lies in previous segment or at beginning
+                            v[2] = elev[i]
+                            break
+                        if line_dist <= 1:
+                            v[2] = elev[i] + line_dist*(elev[i+1] - elev[i])
+                            break
+                    if v[2] == 333333:  # elevation not yet changed, so we are at the end of path
+                        v[2] = elev[-1]
+                    self.log.info("Set path elevation for {} to {} meters".format(v[:2], v[2]))
+
+    def get_mesh_elevation_for_magic_number(self, coords, magic_number=-99999):
+        #  when MAGIC NUMBER is used for elevation then elevation is assigned from dsf file instead assigning it
+        for i in range(len(coords)):  # MAGIC elevation needs to be replaced before placeholder elevation is assigned
+            if coords[i][2] == magic_number:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
+                coords[i][2] = self.mesh_elevation([coords[i][1], coords[i][0]])  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                self.log.info("Assigned magic elevation -99999 at {} to: {}".format(coords[i][:2], coords[i][2]))

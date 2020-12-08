@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.3 exp
+# muxp_math.py   Version: 0.3.4 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -129,10 +129,11 @@ def PointLocationInTria(p, t): #delivers location of point p in Tria t by vector
     b = nom_b / denom
     return a, b #returns multiplier for vector (t2 - t0) and for vector (t2 - t1) starting from point t2
 
-def isPointInTria(p, t): #delivers True if p lies in t, else False
+def isPointInTria(p, t, epsilon=0): #delivers True if p lies in t, else False
+    # epsilon allows error rate in percent e.g. 0.01 would allow 1% of tria size as error
     a, b = PointLocationInTria(p, t)
     c = 1 - a - b
-    return (0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1)
+    return (0-epsilon <= a <= 1+epsilon and 0-epsilon <= b <= 1+epsilon and 0-epsilon <= c <= 1+epsilon)
 
 def PointInPoly(p, poly):
     """
@@ -798,11 +799,12 @@ def stretch_poly(poly, width):
         norm_q = [pqn[0] + rqn[0], pqn[1] + rqn[1]]  # vertex normal on q dependent on p and r
         if abs(norm_q[0]) < 0.0001 and abs(norm_q[1]) < 0.0001:  # normal is zero vector
             norm_q = [-pqn[1], pqn[0]]  # set vertex normal in that case to left orthogonal of vector pq on q
-        qn = normalize(norm_q)  # normalize length on vertex normal on q
         pqno = [-pqn[1], pqn[0]]  # left orthogonal of vector pq on q
-        edge_extent = width / cos_angle(pqno, qn)  # the edges of stretched poly are parallel in distance width but
-        # edges needs to be extend further in order to keep them parallel
-        stretched_poly.append([x2lon(q[0] + edge_extent*qn[0]), y2lat(q[1] + edge_extent*qn[1])])
+        stretched = [x2lon(q[0] + norm_q[0]), y2lat(q[1] + norm_q[1])]  # stretched poly in XP coords but some width
+        strech_vect = [stretched[0] - poly[i][0], stretched[1] - poly[i][1]]  # vector on each corner for stretching
+        f = width / (distance(poly[i], stretched) * cos_angle(pqno, norm_q))  # correct stretch factor f to achieve stretching with width
+        # cos is required to get parallel edges having width as distance and not from corner vertices
+        stretched_poly.append([poly[i][0] + f*strech_vect[0], poly[i][1] + f*strech_vect[1]])
 
     if first_and_last_vertex_identical:
         poly.append(poly[0])

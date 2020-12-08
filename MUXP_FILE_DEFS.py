@@ -1,4 +1,4 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.33
+SUPPORTED_MUXP_FILE_VERSION = 0.34
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 
@@ -11,7 +11,8 @@ MUXP_COMMANDS = (
     "cut_flat_terrain_in_mesh",
     "cut_spline_segment",
     "cut_strip",
-    "cut_spline_poly"
+    "cut_path",
+    "cut_spline_poly",
     "update_network_levels",
     "limit_edges",
     "update_raster_elevation",
@@ -40,6 +41,7 @@ MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],
                            "cut_flat_terrain_in_mesh": ["coordinates", "terrain", "elevation"],
                            "cut_spline_segment": ["3d_coordinates", "terrain", "width", "profile_interval"],
                            "cut_strip": ["coordinates", "3d_coordinates", "terrain", "width", "profile_interval"],
+                           "cut_path": ["3d_coordinates", "width"],
                            "cut_spline_poly": ["coordinates", "3d_coordinates"],
                            "update_network_levels": ["coordinates", "road_coords_drapped"],
                            "limit_edges": ["coordinates", "edge_limit"],
