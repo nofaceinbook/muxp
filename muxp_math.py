@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.4 exp
+# muxp_math.py   Version: 0.3.5 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -85,6 +85,11 @@ def distance(p1, p2): #calculates distance between p1 and p2 in meteres where p 
     a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))   
     return R * c
+
+def distance_vector(p, q):  # returns x, y, z distances for as vector for two points p and q (all in 3d coordinates)
+    lat_degree_dist_average = 111000
+    degree_dist_at_lat = cos(radians(p[1])) * 111120  # latest is degree_dist_at_equator
+    return [(q[0] - p[0])*degree_dist_at_lat, (q[1] - p[1])*lat_degree_dist_average, q[2] - p[2]]
 
 def edgeDistance(p, a, b): #calculates distance of point p to edge e from a to b
     vector_ab = (b[0] - a[0], b[1] - a[1])
@@ -211,17 +216,18 @@ def doBoundingRectanglesIntersect(r, s):
 
 def CenterInAtrias(atrias):
     """
-    Returns center as [x, y, z] for all trias in a list of area trias.
+    Returns center as [x, y, z] for all trias in dictionary with lists of area trias.
     """
     max_coords = [-99999, -99999, -99999]
     min_coords = [99999, 99999, 99999]
-    for t in atrias:
-        for i in range(3):
-            for j in range(3):
-                if t[i][j] < min_coords[j]:
-                    min_coords[j] = t[i][j]
-                if t[i][j] > max_coords[j]:
-                    max_coords[j] = t[i][j]
+    for key in atrias:
+        for t in atrias[key]:
+            for i in range(3):
+                for j in range(3):
+                    if t[i][j] < min_coords[j]:
+                        min_coords[j] = t[i][j]
+                    if t[i][j] > max_coords[j]:
+                        max_coords[j] = t[i][j]
     return [(min_coords[0]+max_coords[0])/2, (min_coords[1]+max_coords[1])/2, (min_coords[2]+max_coords[2])/2]
 
 def segmentToBox(p1, p2, w):

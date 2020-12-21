@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.4 exp
+# muxp_area.py    Version: 0.3.5 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -26,7 +26,7 @@ from xplnedsf2 import *
 from logging import getLogger
 from muxp_math import *
 from copy import deepcopy
-
+from math import acos
     
 class muxpArea:
     
@@ -38,6 +38,8 @@ class muxpArea:
                   # [0 - 2] list of all coordinates of tria vertices including s/t ##### ONLY REFERENCE NO DEEPCOPY / BETTER JUST DEEPCOPY of x,y corrds ?????
                   # [3 - 5] list of pool and vertex id in pool in dsf -- they stay even, if coordinates are changed or trias split; allows reference to original trias/values/scaling
                   # [6] index to patch tria was in dsf
+        self.elevation_scalings = dict()  # dictionary of scalings for elevation relevant in that area; pair of (factor, base) are keys in dict and value is number of patch for which it exists
+        self.elev_factor_min, self.elev_base_min = (999999, 999999)  # minimum values in existing mesh used for defining according new pools in update
 
     def extractMeshArea(self, latS, latN, lonW, lonE):
         """
@@ -65,7 +67,12 @@ class muxpArea:
                                 self.atrias.append([deepcopy(self.dsf.V[t[0][0]][t[0][1]]), deepcopy(self.dsf.V[t[1][0]][t[1][1]]), deepcopy(self.dsf.V[t[2][0]][t[2][1]])])
                                 self.atrias[-1].extend(deepcopy(t))  #so we have an intersection of tria box with area and append the tria
                                 self.atrias[-1].append(self.dsf.Patches.index(p))
-                                self.apatches.add(self.dsf.Patches.index(p))
+                                current_patch_index = self.dsf.Patches.index(p)
+                                self.apatches.add(current_patch_index)
+                                ### self.log.info("Scaling: {}   just multiplier: {}".format(self.dsf.Scalings[t[0][0]], self.dsf.Scalings[t[0][0]][0]))
+                                self.elevation_scalings[(self.dsf.Scalings[t[0][0]][2][0], self.dsf.Scalings[t[0][0]][2][1])] = current_patch_index
+                                self.elevation_scalings[(self.dsf.Scalings[t[1][0]][2][0], self.dsf.Scalings[t[1][0]][2][1])] = current_patch_index
+                                self.elevation_scalings[(self.dsf.Scalings[t[2][0]][2][0], self.dsf.Scalings[t[2][0]][2][1])] = current_patch_index
                                 tremoved.append(t)
                                 self.log.debug("Tria {} with latS: {}  latN: {}  lonW: {} and lonE: {} in area.".format(t, miny, maxy, minx, maxx))
                 triaCount += 1
@@ -73,6 +80,12 @@ class muxpArea:
                 trias.remove(t)
             p.trias2cmds(trias) #updates dsf patch with trias not including removed ones
         self.log.info("  ... dsf has {} trias and {} trias from {} different patches are now in the extracted area.".format(triaCount, len(self.atrias), len(self.apatches)))
+        self.elev_factor_min, self.elev_base_min = (999999, 999999)  # start with high numbers for searching for min
+        for e in self.elevation_scalings.keys():
+            self.elev_factor_min = min(self.elev_factor_min, e[0])
+            self.elev_base_min = min(self.elev_base_min, e[1])
+        self.log.info(" DSF Extract has following elevation scalings (with example patch number as value): {}".format(self.elevation_scalings))
+        self.log.info(" For updated dsf following minimum factor: {} and base: {} are relevant".format(self.elev_factor_min, self.elev_base_min))
         return
     
     
@@ -688,16 +701,23 @@ class muxpArea:
         Extracts all pyhsical trias of area which are in poly to an Wavefront .obj File with filename.
         Existing files will be overwritten!
         """
-        extract_atrias = []  # list of area trias, that have to be extracted
+        extract_atrias = dict()  # dictionary of lists of area trias, that have to be extracted; keys are IDs of patches they belong to
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         normals = dict()  # dictionary for vertex normals
         self.log.info("**** EXTRACTED VERTICES FOR OBJ FILE INCLUDING ELEVATIONS AS IS IN MEMORY *****")  ### TESTING ONLY ###
         for t in self.atrias:  # go through all trias in area
+            if not t[6]:  # Patch not defined for that tria
+                self.log.error("Patch does not exist for tria: {} --> not exported!!".format(t))
+                continue
             if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
                 if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
-                    extract_atrias.append(deepcopy(t))  #### NEW: Deepcopy, to be able to change elevation without effect
+                    terrain_id = self.dsf.Patches[t[6]].defIndex
+                    if terrain_id not in extract_atrias:
+                        extract_atrias[terrain_id] = [deepcopy(t)]
+                    else:
+                        extract_atrias[terrain_id].append(deepcopy(t))  #### NEW: Deepcopy, to be able to change elevation without effect
                     for v in range(3):
-                        extract_atrias[-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
+                        extract_atrias[terrain_id][-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
                         vc = (round(t[v][0], 7), round(t[v][1], 7))
                         vn = (round(t[v][3], 4), round(t[v][4], 4))
                         self.log.info("{}  elev: {}".format(vc, t[v][2]))  ### TESTING ONLY ####
@@ -727,12 +747,24 @@ class muxpArea:
                                               vertices[vc][0] - center[2]))
             for vn in normals:
                 f.write("vn {} {} {}\n".format(vn[0], vn[1], sqrt(1 - vn[0]*vn[0] - vn[1]*vn[1])))
-            for t in extract_atrias:
-                f.write("f")
-                for v in range(3):
-                    f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 4, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 2))
-                    # +4 / +2 as in .obj indices start with 1 instead 0 and for center 3 vertices and 1 normal added
-                f.write("\n")
+            previous_written_material_name = None
+            for terrain_id in extract_atrias:
+                terrain_name = self.dsf.DefTerrains[terrain_id]
+                if terrain_name == "terrain_Water":
+                    material_name = "terrain_Water"
+                else:
+                    material_name = "solid_default_terrain"
+                if previous_written_material_name != material_name:  # only write material change to file if it changed
+                    f.write("usemtl {}\n".format(material_name))
+                    previous_written_material_name = material_name
+                ######### TBD: export also other terrain types #####################
+                ######### TBD: WRITE MTL FILE AND INCLUDE USAGE IN .OBJ FILE #######
+                for t in extract_atrias[terrain_id]:
+                    f.write("f")
+                    for v in range(3):
+                        f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 4, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 2))
+                        # +4 / +2 as in .obj indices start with 1 instead 0 and for center 3 vertices and 1 normal added
+                    f.write("\n")
 
 
     def insertMeshFromObjFile(self, filename, poly, terrain):
@@ -760,6 +792,7 @@ class muxpArea:
         vertices = [[None]]  # list of vertices to be read; first dummy element to match index starting with 1
         normals = [[None]]  # list of vertex normals to be read; first dummy element to match index starting with 1
         trias = []
+        material = []  # list of used materials with [starting tria index, material_name] as values
         outer_edges = dict()  # dict with (v1_index, v2_index) as key; at the end keys are all edges of poly outside
         with open(filename, encoding="utf8", errors="ignore") as f:
             # Checking if file exists was done in muxp.py before calling this function!
@@ -835,6 +868,9 @@ class muxpArea:
                         ln = sqrt(vnx*vnx + vny*vny + vnz*vnz)  # length of vertex normal
                         t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
                     trias.append(t)
+                elif line.find("usemtl ") == 0 and current_object == "MESH":  # change of material / terrain type
+                    mat = line.split()
+                    material.append([len(trias), mat[1]])
         self.log.info("Mesh .obj file read with center-offset (Mercator): {}".format(center))
         if len(center) < 3:
             self.log.error("Read .obj file has no object CENTER for coordinate offset. Mesh not inserted!")
@@ -846,9 +882,20 @@ class muxpArea:
             #self.log.info("Converting Vertex {} to Mercator.".format(vertices[i]))
             if len(vertices[i]) >= 3:
                 vertices[i] = [x2lon(vertices[i][0] + center[0]), y2lat(vertices[i][1] + center[1]), vertices[i][2] + center[2]]
-        patchID = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!
+        patchID_terrain = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!
         self.log.info("Following trias have been read from file:")
-        for tria in trias:
+        material_index = 0
+        material.append([len(trias), "END OF MATERIAL LIST"])  # have closing element as below always looking for next
+        for tria_num, tria in enumerate(trias):
+            if material[material_index][0] == tria_num:  # we have new material starting at that tria
+                ########## TBD: Also allow other terrain types to be im/exported ########################
+                if material[material_index][1] == "terrain_Water":
+                    patchID = self.getPatchID("terrain_Water")
+                    self.log.info("Starting with tria number {} to use material/terrain: {}".format(tria_num, "terrain_Water"))
+                else:
+                    patchID = patchID_terrain
+                    self.log.info("Starting with tria number {} to use material/terrain: {}".format(tria_num, terrain))
+                material_index += 1
             #self.log.info("Tria in Mercator offset: {}".format(tria))  ##### TESTING ONLY #######
             new_v = [None, None, None]
             for e in range(3):
@@ -913,11 +960,87 @@ class muxpArea:
                     return -2
                 new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
                 # This version only creates simple vertices without vertex normals and without s/t coordinates
-            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
+            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID_terrain])
             self.log.info("Borderland Tria added: {}".format(self.atrias[-1]))
             # As tria is completely new, there is no pool/patchID where tria is inside, so None
         return borderland
 
+    def calculate_vertex_normals(self, poly):
+        """
+        Calculates vertex normals for all trias that lay fully in poly and assigns them to all of these vertics.
+        Note: vertices around poly are still required to calculate normals of vertices inside poly.
+        """
+
+        def dot_product(v1, v2):
+            return sum((a * b) for a, b in zip(v1, v2))
+        def length(v):
+            return sqrt(dot_product(v, v))
+        def v_angle(v1, v2):  # returns co-sinus value of angle #### FOR THE MOMENT REALL RETURNS ANGLE
+            length_prod = length(v1) * length(v2)
+            if length_prod == 0:
+                return 0  # avoid error
+            cos_angle = dot_product(v1, v2) / length_prod
+            if cos_angle > 1:
+                return acos(1)
+            if cos_angle < -1:
+                return acos(-1)
+            return acos(cos_angle)
+
+        self.log.info("**** CALCULATING VERTEX NORMALS *****")  ### TESTING ONLY ###
+        normal_dict = {}  # dictionary that contains for (x, y) coords a  list with the sum of face normal vectors
+        nl_dict = {} ### JUST Treturn acos(dot_product(v1, v2) / length_prodESTING ####
+        # of attached trias in [0:3]
+        for t in self.atrias:  # go through all trias in area
+            if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
+                if PointInPoly(t[0][:2], poly) or PointInPoly(t[1][:2], poly) or PointInPoly(t[2][:2], poly):
+                    ### TO BE OPTIMIZED: REMEMBER WHICH POINTS ARE IN POLY TO AVOID SAME CHECK BELOW ######
+                    tc = [(round(t[0][0], 7), round(t[0][1], 7), round(self.dsf.getVertexElevation(*t[0][:3]), 2)),
+                          (round(t[1][0], 7), round(t[1][1], 7), round(self.dsf.getVertexElevation(*t[1][:3]), 2)),
+                          (round(t[2][0], 7), round(t[2][1], 7), round(self.dsf.getVertexElevation(*t[2][:3]), 2))]
+                    u = distance_vector(tc[2], tc[0])  # span tria with u, v vectors starting at 3rd point in tria
+                    v = distance_vector(tc[2], tc[1])
+                    self.log.info("tria: {}".format(tc))
+                    self.log.info("  u: {}   v: {}".format(u, v))  # TO BE REMOVED -- TESTING ONLY -- #############
+                    # COULD BE MORE EFFICIENT TO CALCULATE DISTANCE AS THIS IS JUST FOR X AND Y SEPARATE !!! ##########
+                    tn = [u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2], u[0]*v[1] - u[1]*v[0]]  # normal vector for tria t
+                    tn_length = sqrt(tn[0]**2 + tn[1]**2 + tn[2]**2)
+                    if tn_length:  # avoid division by zero
+                        l = 1 / sqrt(tn[0]**2 + tn[1]**2 + tn[2]**2)  # set length of each face vector to 1
+                    else:
+                        l = 1
+                        self.log.warning("Zero length normal vector for tria: {}".format(t))
+                    #l = 2  # tn is already created to reflect half size of the tria itself, so okay for weighting
+                    # tn[1] *= -1  # According to dsf spec the y coordinate is positive for going south, by calc above it is negative BUT actually it is positive for North
+                    if tn[2] < 0:  # make sure that z-vector is always showing upside
+                        l *= -1
+                    tnn = [l * tn[0], l*tn[1], l*tn[2]]  # face normal on tria t normalized to length 1
+                    self.log.info("  Normal vector for tria (weighted by tria size): {}".format(tnn))
+                    for i in range(3):
+                        vc2 = tc[i][0:2]  # just first two coordinates of tria vertices
+                        if PointInPoly(vc2, poly):
+                            # following line calculates angle of tria at vertex vc2 for weighting vertex normal
+                            angle = v_angle([tc[(i-1)%3][0] - tc[i][0], tc[(i-1)%3][1] - tc[i][1], tc[(i-1)%3][2] - tc[i][2]], [tc[(i+1)%3][0] - tc[i][0], tc[(i+1)%3][1] - tc[i][1], tc[(i+1)%3][2] - tc[i][2]])
+                            if vc2 not in normal_dict:
+                                normal_dict[vc2] = [angle*tnn[0], angle*tnn[1], angle*tnn[2]]
+                                nl_dict[vc2] = [tnn]
+                            else:
+                                normal_dict[vc2] = [normal_dict[vc2][0] + angle*tnn[0], normal_dict[vc2][1] + angle*tnn[1], normal_dict[vc2][2] + angle*tnn[2]]
+                                nl_dict[vc2].append(tnn)
+
+        for v in normal_dict:  # setting all vertex normals in dict to length 1
+            vn = normal_dict[v]
+            l = 1 / sqrt(vn[0] ** 2 + vn[1] ** 2 + vn[2] ** 2)
+            normal_dict[v] = [l*vn[0], l*vn[1], l*vn[2]]
+            self.log.info("Vertex {} gets vertex normal: {}".format(v, vn))
+            self.log.info("   Based on following face normals: {}".format(nl_dict[v]))
+
+        for t in self.atrias:  # now check all vertices incl. non physical ones if they get new normal vector
+            for v in t[:3]:
+                if (round(v[0], 7), round(v[1], 7)) in normal_dict:
+                    self.log.info("Setting for {} normal to {}".format(v, normal_dict[(round(v[0], 7), round(v[1], 7))]))
+                    v[3] = normal_dict[(round(v[0], 7), round(v[1], 7))][0]  # positive value to east
+                    v[4] = normal_dict[(round(v[0], 7), round(v[1], 7))][1]  # positive value to south (in XP spec BUT positive is to North !!!)
+                    # direction upwards is calculated by XP; possible as the vector is normalized
     
     def createDSFVertices(self, elevscal=1):
         """
@@ -936,7 +1059,7 @@ class muxpArea:
                 count = 0 #counting how many coordinates are still the same as the referenced vertex in dsf
                 if t[vt+3][0] != None and t[vt+3][1] != None: #in case of completely new tria we have no previous vertices and new ones need to be created in any case
                     for vti in range(len(t[vt])):
-                        if t[vt][vti] != self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]:
+                        if round(t[vt][vti], 7) != round(self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti], 7):  #### NEW 17.12. compare rounded to 1 cm #####
                             self.log.info("Reference for vertex {} not correct any more. {} differs to {}!".format(self.atrias.index(t), t[vt][vti], self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]))
                             break
                         count += 1
@@ -951,6 +1074,16 @@ class muxpArea:
                             counter = 0
                             for j in range(len(v)): #check for each plane j if v could fit between minimum and maximum reach of scale
                                 if v[j] >= self.dsf.Scalings[i][j][1] and v[j] <= self.dsf.Scalings[i][j][1] + self.dsf.Scalings[i][j][0]:
+                                    counter += 1
+                                elif abs(v[j] - self.dsf.Scalings[i][j][1]) < 1e-7:   #### NEW 17.12. compare rounded to 1 cm #####
+                                    self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to minimum {}".format(v, j, self.dsf.Scalings[i][j][1]))
+                                    v[j] = self.dsf.Scalings[i][j][1]
+                                    t[vt][j] = self.dsf.Scalings[i][j][1]
+                                    counter += 1
+                                elif abs(v[j] - self.dsf.Scalings[i][j][1] - self.dsf.Scalings[i][j][0]) < 1e-7:   #### NEW 17.12. compare rounded to 1 cm #####
+                                    self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to maximum {}".format(v, j, self.dsf.Scalings[i][j][1] + self.dsf.Scalings[i][j][0]))
+                                    v[j] = self.dsf.Scalings[i][j][1] + self.dsf.Scalings[i][j][0]
+                                    t[vt][j] = self.dsf.Scalings[i][j][1] + self.dsf.Scalings[i][j][0]
                                     counter += 1
                                 else:
                                     break
@@ -977,7 +1110,7 @@ class muxpArea:
                                 for i in range(3,len(v)): #check for all planes/coordinates whether they are nearly equal
                                     if abs(ev[i] - v[i]) >= self.dsf.Scalings[poolID4v][i][0] / 65535: #if difference is lower than scale multiplier both coordinates would end up same after endcoding, so they match
                                         break
-                                    counter +=1                       
+                                    counter +=1
                             if counter == len(v): #matching vertex found          #### NEW 31.03.2020: was before first if case ####
                                 t[vt+3] = [poolID4v, ev_index]  #### NEW 31.03.2020  was before set to [poolID4v, self.dsf.V[poolID4v].index(ev)]
                                 self.log.info("  Vertex {} equals vertex {} in existing Pool with index {} .".format(v, ev, poolID4v))
@@ -1012,22 +1145,36 @@ class muxpArea:
                                 self.dsf.Scalings[-1][2][1] = -32768  # Off-Set is exact RASTER Elevation (for exact matching), no need to go deeper
                             else: ### Following two lines are else
                                 self.dsf.Scalings[-1][2][0] = int(65535 * elevscal)  # new multiplier based on required scaling for elevation defined for new pool
-                                self.dsf.Scalings[-1][2][1] = int(-500 + int((v[2]+500)/(65535 * elevscal)) * (65535 * elevscal)) #offset for elevation of v   ######## -500m is deepest vaule that can be defined with this routine ####
+                                if self.elev_base_min < -1000:  # there was no usabale base elevation (e.g. only raster elevation present)
+                                    self.dsf.Scalings[-1][2][1] = int(-10 + int((v[2] + 10) / (65535 * elevscal)) * (65535 * elevscal))  # offset for elevation of v, starting with -10m allows also small negative values at coasts; for deeper values the check below will set a lower sacaling
+                                else:
+                                    self.dsf.Scalings[-1][2][1] = self.elev_base_min  # use same base as original mesh; if new vertices will be lower, pool will be adapted below when scale is checked ## NEW 18.12.20
+                                self.log.info("This new pool received base elevation of {} meters and allows to go additional {} meters up".format(self.dsf.Scalings[-1][2][1], self.dsf.Scalings[-1][2][0]))
                         ## Check new scaling for vertex and adapt as required based on multipliers / offsets give
                         scale_checked = False
                         while not scale_checked:
                             scale_checked = True #assume test will passed, will be set False if on check does not pass
                             for j in range(len(v)): #check for each plane j if v could fit between minimum and maximum reach of scale
                                 if v[j] < self.dsf.Scalings[-1][j][1]: #v at plane j is lower than scaling allows
-                                    self.log.info("  Vertex in plane {} has value {} and thus lower than allowed scaling minimum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1]))
-                                    self.dsf.Scalings[-1][j][1] -= self.dsf.Scalings[-1][j][0] #subtract one scalefactor from base
-                                    scale_checked = False #check if new scaling fits
-                                    self.log.warning("  Vertex {} does not fit to scaling. Reduced scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
+                                    if abs(v[j] - self.dsf.Scalings[-1][j][1]) < 1e-7:  #### NEW 17.12. compare rounded to 1 cm #####
+                                        self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to minimum {}".format(v, j, self.dsf.Scalings[-1][j][1]))
+                                        v[j] = self.dsf.Scalings[-1][j][1]
+                                        t[vt][j] = self.dsf.Scalings[-1][j][1]
+                                    else:
+                                        self.log.info("  Vertex in plane {} has value {} and thus lower than allowed scaling minimum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1]))
+                                        self.dsf.Scalings[-1][j][1] -= self.dsf.Scalings[-1][j][0] #subtract one scalefactor from base
+                                        scale_checked = False #check if new scaling fits
+                                        self.log.warning("  Vertex {} does not fit to scaling. Reduced scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
                                 if v[j] > self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]: #v at plane j is higher than scaling allows
-                                    self.log.info("  Vertex in plane {} has value {} and thus higher than allowed scaling maximum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
-                                    self.dsf.Scalings[-1][j][1] += self.dsf.Scalings[-1][j][0] #add one scalefactor to base
-                                    scale_checked = False #check if new scaling fits
-                                    self.log.warning("  Vertex {} does not fit to scaling. Increased scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
+                                    if abs(v[j] - self.dsf.Scalings[-1][j][1] - self.dsf.Scalings[-1][j][0]) < 1e-7:  #### NEW 17.12. compare rounded to 1 cm #####
+                                        self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to maximum {}".format(v, j, self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[.1][j][0]))
+                                        v[j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
+                                        t[vt][j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
+                                    else:
+                                        self.log.info("  Vertex in plane {} has value {} and thus higher than allowed scaling maximum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
+                                        self.dsf.Scalings[-1][j][1] += self.dsf.Scalings[-1][j][0] #add one scalefactor to base
+                                        scale_checked = False #check if new scaling fits
+                                        self.log.warning("  Vertex {} does not fit to scaling. Increased scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
                         poolID4v = len(self.dsf.Scalings) - 1 #ID for the pool is the last one added
                         self.log.info("  New pool with index {} and scaling {} added to insert vertex {}.".format(poolID4v, self.dsf.Scalings[poolID4v], v))
                         newPools.append(poolID4v)
@@ -1305,7 +1452,7 @@ class muxpArea:
                 for box_edge in range(4):
                     ecps = self.cutEdges(poly[box_edge], stretched_poly[box_edge])
                     # OPEN: Perform that cut only for smoothing ????
-            if elevation == None:
+            if elevation == None or elevation == -99999:
                 stretched_poly = self.smooth_elevation_around_poly(poly, None, d, True)
             else:
                 stretched_poly = self.smooth_elevation_around_poly(poly, elevation, d)

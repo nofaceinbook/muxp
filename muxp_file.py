@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.3.3 exp
+# muxp_file.py    Version: 0.3.5 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -112,7 +112,7 @@ def validate_muxp(d, logname):
             log.error(err)
             return -7, err
     else:
-        d["elevation_step"] = 0.05  # default setting are 0.05 m steps for different elevations in mesh
+        d["elevation_step"] = None  # No value set; to be set during processing
 
         ### CONVERT AND CHECK BASE VALUES
     try:

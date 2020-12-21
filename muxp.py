@@ -1074,8 +1074,25 @@ class muxpGUI:
         log.info("Area to be extracted: {}".format(update["area"]))
         a.extractMeshArea(*update["area"])
         elevation_scale = update["elevation_step"]
-        log.info("Elevation Scale = elevation_step defined in MUXP file is: {} m (or 0.05 m in case no value present)".format(elevation_scale))
-        
+        if elevation_scale is None:  # not set in MUXP file; use default value
+            elevation_scale = 1/51  # default setting are 0.0196 m steps for different elevations in mesh
+            # this value above is 1/51 as 51 is divisor of 65335 (also other divisors like 3, 5, 17, 257 and combin.
+            # are good. Such divisors allows to achieve full meter elev. of other vertices and avoids glitches in mesh
+            log.info("Setting as elevation step default value of 0.0196078431372549 meters")
+            if a.elev_factor_min/65535 < elevation_scale:
+                elevation_scale = a.elev_factor_min/65535
+                log.info("Using min. elevation scale in dsf file {} which is lower than default to ensure matching with existing elevations!".format(a.elev_factor_min/65535))
+            if 0.07 > a.elev_factor_min/65535 > elevation_scale:
+                elevation_scale = a.elev_factor_min / 65535
+                log.info("Using min. elevation scale in dsf file {} which is higher than default 0.0117647 but to ensure matching with existing elevations!".format(a.elev_factor_min/65535))
+            if 1 > a.elev_factor_min/65535 > 0.0666667:
+                log.warning("Min. elevation scale in dsf file is {}  and much higer than default, so keeping default. In case you want to use it, you could declare it within MXUP file.".format(a.elev_factor_min/65535))
+        else:
+            log.warning("Using elevation scale defined in MUXP file: {}. Might be that this will not match elevation scale {} in dsf file at all coordinates and causes visible edges".format(elevation_scale, a.elev_factor_min/65535))
+        if elevation_scale not in [1, 1/3, 1/5, 1/15, 1/17, 1/51, 1/85, 1/255, 1/257]:
+            log.warning("You are using elevation scale which will not allow exact match of full meters in XP. This could end up in viisble edges. Best is to use one of theses scales".format([1/3, 1/5, 1/15, 1/17, 1/51, 1/85, 1/255, 1/257]))
+
+
         areabound = [(update["area"][2],update["area"][0]), (update["area"][2],update["area"][1]), (update["area"][3],update["area"][1]),
                      (update["area"][3],update["area"][0]), (update["area"][2],update["area"][0]) ]
         
@@ -1200,6 +1217,11 @@ class muxpGUI:
                 if self.kmlExport:
                     kmlExport2(self.dsf, shown_polys, a.atrias, kml_filename + "_{}".format(c_index+1))
 
+            if c["command"] == "calculate_vertex_normals":
+                ########### JUST FOR TESTING !!!!!!!!!!!!!! ###################
+                a.calculate_vertex_normals(c["coordinates"])
+                ######### ACTUALLY should be done for commands having effect on normals #############
+
             if c["command"] == "cut_path":
                 ####### TBD: allow definition of segments and spline for path ############
                 coords = []  # just coordinates as [x, y] of 3d_coordinates
@@ -1270,7 +1292,8 @@ class muxpGUI:
                 borderv.append(borderv[0])  # make it a closed poly
                 for v in borderv:
                     log.info("Border Vertex after Cut: {}".format(v))
-                a.createPolyTerrain(borderv, c["terrain"], c["elevation"])  # NEW 16.08. was c["coordinates"] instead borderv
+                if c["terrain"] != "None":
+                    a.createPolyTerrain(borderv, c["terrain"], c["elevation"])  # NEW 16.08. was c["coordinates"] instead borderv
                 ### NEW 16.08.20 Following 2 lines not used, as mesh should already be split by cut above
                 #for vertex in borderv: #insert in mesh for poly also vertices from surrounding mesh on the border
                 #    a.splitCloseEdges(vertex)
@@ -1447,6 +1470,14 @@ class muxpGUI:
         self.window.update()
         a.validate_mesh()
         a.createDSFVertices(elevation_scale)
+        ########## FOR TESTING - TO BE REMOVED ##############
+        #log.info("++++ LIST OF VERTICES ++++")
+        #for t in a.atrias:
+        #    for v in t[:3]:
+        #        log.info(v)
+        #log.info("+++++ SCALINGS +++++")
+        #for sn, s in enumerate(a.dsf.Scalings):
+        #    log.info("{}: {}".format(sn, s))
         a.insertMeshArea()
 
 

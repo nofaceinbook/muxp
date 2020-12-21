@@ -1,4 +1,4 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.34
+SUPPORTED_MUXP_FILE_VERSION = 0.35
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 
@@ -21,7 +21,8 @@ MUXP_COMMANDS = (
     "extract_mesh_to_file",
     "insert_mesh_from_file",
     "exit_without_update",
-    "unflatten_default_apt"
+    "unflatten_default_apt",
+    "calculate_vertex_normals"
 )
 
 MUXP_PARAMS = (
@@ -51,7 +52,8 @@ MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],
                            "extract_mesh_to_file": ["coordinates"],
                            "insert_mesh_from_file": ["coordinates", "terrain"],
                            "exit_without_update": [],
-                           "unflatten_default_apt": ["name"]}
+                           "unflatten_default_apt": ["name"],
+                           "calculate_vertex_normals": ["coordinates"]}
 
 PARAMETER_TYPES = {"command": ["string"],  # this is just command-type
                    "_command_info": ["string"],  # added below, includes full command including added info after '.' like cut_polygon.inner

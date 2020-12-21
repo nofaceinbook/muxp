@@ -1,6 +1,6 @@
 #******************************************************************************
 #
-# xplnedsf2.py        Version 0.5.7  for muxp
+# xplnedsf2.py        Version 0.5.8  for muxp
 # ---------------------------------------------------------
 # Python module for reading and writing X_Plane DSF files.
 #
@@ -103,7 +103,8 @@ class XPLNEpatch:
         if len(self.cmds) > 0: ############### NEW 03.04.2020 ####################################
             self.cmds = [self.cmds[0]] #just stay with pool defintion in first command
         else: #first command not yet set
-            self.cmds = [[1, trias[0][0][0]]] #take pool from first vertex in first tria as first command to define pool
+            if len(trias):  # trias might also be empty then this pools stays empty  ### NEW: 14.12.2020 ####
+                self.cmds = [[1, trias[0][0][0]]] #take pool from first vertex in first tria as first command to define pool
         i = 0 #counts number of trias
         c = [] #builds single commands
         for t in trias:
