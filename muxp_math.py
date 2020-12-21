@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.5 exp
+# muxp_math.py   Version: 0.3.5b exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -811,8 +811,13 @@ def stretch_poly(poly, width):
         f = width / (distance(poly[i], stretched) * cos_angle(pqno, norm_q))  # correct stretch factor f to achieve stretching with width
         # cos is required to get parallel edges having width as distance and not from corner vertices
         stretched_poly.append([poly[i][0] + f*strech_vect[0], poly[i][1] + f*strech_vect[1]])
+        print("New stretched vertex {}: {}".format(i, stretched_poly[-1]))  ### TESTING: TO BE REMOVED #####
 
     if first_and_last_vertex_identical:
         poly.append(poly[0])
         stretched_poly.append(stretched_poly[0])
     return stretched_poly
+
+
+def tria_center(p, q, r):  # returning center coordinates of a triangle with points p, q, r
+    return [(p[0] + q[0] + r[0])/3, (p[1] + q[1] + r[1])/3]

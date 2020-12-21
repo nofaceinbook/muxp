@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.4 exp"
+muxp_VERSION = "0.3.5b exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1167,7 +1167,7 @@ class muxpGUI:
                     obj_filename = path.join(head, c["name"])
                 if not path.isfile(obj_filename):  # Error that insertion file not existent
                     return -10
-                borderlandpoly = a.insertMeshFromObjFile(obj_filename, c["coordinates"], c["terrain"])
+                borderlandpoly = a.insertMeshFromObjFile(obj_filename, LogName, c["coordinates"], c["terrain"], c["type"], self.dsf)
                 if len(borderlandpoly) == 0:  # Error occurred when inserting
                     return -11
                 # elevation_scale = 0.05  # is now default value and configurable in MUXP File

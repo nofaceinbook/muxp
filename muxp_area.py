@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.5 exp
+# muxp_area.py    Version: 0.3.5b exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -27,6 +27,8 @@ from logging import getLogger
 from muxp_math import *
 from copy import deepcopy
 from math import acos
+from obj_ex_import import *
+from muxp_KMLexport import kmlExport2  # TESTING ONLY
     
 class muxpArea:
     
@@ -766,8 +768,7 @@ class muxpArea:
                         # +4 / +2 as in .obj indices start with 1 instead 0 and for center 3 vertices and 1 normal added
                     f.write("\n")
 
-
-    def insertMeshFromObjFile(self, filename, poly, terrain):
+    def insertMeshFromObjFile(self, filename, logname, poly, terrain, type, dsf):
         """
         Inserts mesh with only physical trias from an .obj filename and inserts it in area.
         The outer polygon of file-mesh is connected to the poly using triangulation. All this
@@ -777,192 +778,77 @@ class muxpArea:
         To have room for the mesh, the mesh is first cut by poly and all inner trias are removed.
         """
         self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
-        polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # False for not keeping inner trias\
-        # None for elevation as only new terrain should get elevation
-        borderv, log_info = sortPointsAlongPoly(borderv, poly)
-        self.log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
-        borderv = borderv[borderv.index(min(borderv)):] + borderv[:borderv.index(min(borderv))]
-        #  borderv start now with the most south-west corner
-        borderv.append(borderv[0])  # make it a closed poly
-        if not IsClockwise(borderv):
-            borderv.reverse()  # outer polygon for later triangulation should be clockwise
-        for v in borderv:
-            self.log.info("Border Vertex after Cut: {}".format(v))
-        center = []  # coordinates for center-offset
-        vertices = [[None]]  # list of vertices to be read; first dummy element to match index starting with 1
-        normals = [[None]]  # list of vertex normals to be read; first dummy element to match index starting with 1
-        trias = []
-        material = []  # list of used materials with [starting tria index, material_name] as values
-        outer_edges = dict()  # dict with (v1_index, v2_index) as key; at the end keys are all edges of poly outside
-        with open(filename, encoding="utf8", errors="ignore") as f:
-            # Checking if file exists was done in muxp.py before calling this function!
-            current_object = ""  # keeps track for which object type information is read
-            for line in f:
-                if line.find("o ") == 0:
-                    if line.find("CENTER_Coordinates") > 0:
-                        current_object = "CENTER"
-                    elif line.find("MESH") > 0:
-                        current_object = "MESH"
-                elif line.find("v ") == 0 and current_object == "CENTER":  # center vertex definition in .obj file
-                    v = line.split()
-                    v.pop(0)  # remove first element 'v' from list
-                    try:
-                        v = [float(v[0]), float(v[1]), float(v[2])]
-                    except (ValueError, IndexError):
-                        self.log.info("Line in .obj file defining v does not contain three floats but {}".format(v))
-                        return []
-                    center.append(v[0] * 10**9 + v[1] * 10**6 + v[2] * 1000)
-                    vertices.append(v)  # append also if not needed for mesh, but relevant for indexing in faces
-                elif line.find("v ") == 0 and current_object == "MESH":  # mesh vertex definition in .obj file
-                    v = line.split()
-                    v.pop(0)  # remove first element 'v' from list
-                    try:
-                        v = [float(v[0]), float(v[1]), float(v[2])]
-                    except (ValueError, IndexError):
-                        self.log.info("Line in .obj file defining v does not contain three floats but {}".format(v))
-                        return []
-                    vertices.append(v)
-                elif line.find("vn ") == 0:  # vertex normal definition in .obj file
-                    vn = line.split()
-                    vn.pop(0)  # remove 'vn' from list
-                    try:
-                        vn = [float(vn[0]), float(vn[1]), float(vn[2])]
-                    except (ValueError, IndexError):
-                        self.log.error("Line in .obj file defining vn does not contain three floats but {}".format(vn))
-                        return []
-                    normals.append(vn)
-                    self.log.info("Vertex normal read: {}".format(normals[-1]))  #### JUST FOR TESTING, TO BE REMOVED !!! #####
-                elif line.find("f ") == 0 and current_object == "MESH":  # face definition in .obj file, only for mesh
-                    # IMPORTANT: THIS VERSION ASSUMES FACES AS V//VN and trias only!
-                    f = line.split()
-                    f.pop(0)  # remove first element 'f' from list
-                    if len(f) != 3:
-                        self.log.error("Line in .obj file defining f defines no triangle but {}".format(f))
-                        return []
-                    t = []  # new tria to be defined
-                    fv = [None, None, None]  # reference to vertices of current face (tria)
-                    fvn = [None, None, None]  # reference to vertex normals of current face (tria)
-                    for i in range(3):
-                        f[i] = f[i].split('/')
-                        if len(f[i]) != 3:
-                            self.log.error("Line in .obj file defining f defines vertex not having 3 values but {}".format(f))
-                            return []
-                        try:
-                            fv[i] = int(f[i][0])
-                            fvn[i] = int(f[i][2])
-                        except ValueError:
-                            self.log.error("Line in .obj file defining f does not have correct integers but {}".format(f))
-                            return []
-                    for i in range(3):
-                        t.append(vertices[fv[i]])
-                        if fv[i] < fv[(i+1) % 3]:
-                            edge_sorted = (fv[i], fv[(i+1)%3])
-                        else:
-                            edge_sorted = (fv[(i + 1) % 3], fv[i])
-                        if edge_sorted in outer_edges:
-                            outer_edges.pop(edge_sorted)  # if the same edge appears twice it is inside
-                        else:
-                            outer_edges[edge_sorted] = True  # edge read the first time
-                    for i in range(3):
-                        vnx, vny, vnz = normals[fvn[i]][0], normals[fvn[i]][1], normals[fvn[i]][2]
-                        ln = sqrt(vnx*vnx + vny*vny + vnz*vnz)  # length of vertex normal
-                        t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
-                    trias.append(t)
-                elif line.find("usemtl ") == 0 and current_object == "MESH":  # change of material / terrain type
-                    mat = line.split()
-                    material.append([len(trias), mat[1]])
-        self.log.info("Mesh .obj file read with center-offset (Mercator): {}".format(center))
-        if len(center) < 3:
-            self.log.error("Read .obj file has no object CENTER for coordinate offset. Mesh not inserted!")
-            return []
-        if len(vertices) < 6:
-            self.log.error("Read .obj file has no triangle defined or object MESH missing. Mesh not inserted!")
-            return []
-        for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
-            #self.log.info("Converting Vertex {} to Mercator.".format(vertices[i]))
-            if len(vertices[i]) >= 3:
-                vertices[i] = [x2lon(vertices[i][0] + center[0]), y2lat(vertices[i][1] + center[1]), vertices[i][2] + center[2]]
-        patchID_terrain = self.getPatchID(terrain)  ### WARNING: This new patch has still no poolDefintion in first Command!!!!
-        self.log.info("Following trias have been read from file:")
-        material_index = 0
-        material.append([len(trias), "END OF MATERIAL LIST"])  # have closing element as below always looking for next
-        for tria_num, tria in enumerate(trias):
-            if material[material_index][0] == tria_num:  # we have new material starting at that tria
-                ########## TBD: Also allow other terrain types to be im/exported ########################
-                if material[material_index][1] == "terrain_Water":
-                    patchID = self.getPatchID("terrain_Water")
-                    self.log.info("Starting with tria number {} to use material/terrain: {}".format(tria_num, "terrain_Water"))
-                else:
-                    patchID = patchID_terrain
-                    self.log.info("Starting with tria number {} to use material/terrain: {}".format(tria_num, terrain))
-                material_index += 1
-            #self.log.info("Tria in Mercator offset: {}".format(tria))  ##### TESTING ONLY #######
-            new_v = [None, None, None]
-            for e in range(3):
-                # For the vertex also center-offset is added and converted back from Mercator to degress
-                new_v[e] = [x2lon(tria[e][0] + center[0]), y2lat(tria[e][1] + center[1]), tria[e][2] + center[2], tria[e][3], tria[e][4]]
-                # This version only creates simple vertices without s/t coordinates
-            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])
-            # As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
-            self.atrias[-1] = self.ensureClockwiseTria(self.atrias[-1])
-            self.log.info(self.atrias[-1])
-        self.log.info("Following outer edges identified: {}".format(outer_edges))
-        v = next(iter(outer_edges))
-        oe_poly = [v[0]]  # list with indices to vertices that build the poly along outer edges
-        next_v = v[1]  # index to next vertex that needs to be found on outline polygon
-        while len(outer_edges) > 1:  # last edge ist clear, as this is just way back to first vertex
-            outer_edges.pop(v)
-            self.log.info("Outer Poly: {} searching next: {}".format(oe_poly, next_v))
-            next_v_found = False
-            for v in outer_edges:
-                if next_v in v:
-                    oe_poly.append(next_v)
-                    if next_v == v[0]:
-                        next_v = v[1]
-                    else:
-                        next_v = v[0]
-                    next_v_found = True
-                    break
-            if not next_v_found:
-                self.log.warning("Mesh to be inserted is not continuous. Following part missing in insertion {}!".format(outer_edges))
-                if next_v == oe_poly[0]:
-                    self.log.warning("However even mesh is not continuous, found closed poly for outer edges and continue with insertion.")
-                    break
-                else:
-                    self.log.error("Found no closed polygon for outer edges. Can't insert this mesh from file!")
-                    return[]
-        self.log.info("Outer Edges as Poly: {}".format(oe_poly))
-        for i in range(len(oe_poly)):
-            oe_poly[i] = vertices[oe_poly[i]]
-        oe_poly = oe_poly[oe_poly.index(min(oe_poly)):] + oe_poly[:oe_poly.index(min(oe_poly))]
-        #  oe_poly start now with the most south-west corner
-        oe_poly.append(oe_poly[0])  # make it a closed poly
-        if IsClockwise(oe_poly):
-            oe_poly.reverse()  # inner poly for triangulation should be anti-clockwise
-        self.log.info("Outer Edges as Poly: {}".format(oe_poly))
-        borderland = borderv + oe_poly   # area between inner/outer poly to be triangulated, not closed for earclip
-        self.log.info("Borderland to be earclipped: {}".format(borderland))
-        trias = earclipTrias(borderland)
-        self.log.info("Earclipp returned {} trias for {} vertices.".format(len(trias), len(borderland)))
-        for tria in trias:
-            new_v = [None, None, None]
-            for e in range(3):
-                elev_found = False  # go through all existing vertices of trias to find elevation at coords
-                for t in self.atrias:
-                    for v in range(3):
-                        if (round(tria[e][0], 7), round(tria[e][1], 7)) == (round(t[v][0], 7), round(t[v][1], 7)):
-                            elev = t[v][2]
-                            elev_found = True
-                            self.log.info("Elevation of borderland vertex {} is {}".format(tria[e], elev))
-                    if elev_found: break
-                if not elev_found:
-                    self.log.error("No elevation found for borderland vertex: {}. Mesh not inserted!".format(tria[e]))
-                    return -2
-                new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
-                # This version only creates simple vertices without vertex normals and without s/t coordinates
-            self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID_terrain])
-            self.log.info("Borderland Tria added: {}".format(self.atrias[-1]))
-            # As tria is completely new, there is no pool/patchID where tria is inside, so None
+        if type == "exact_match_removal_poly":  # the shape of inserting mesh must have same edges as existing mesh in dsf
+            trias_to_be_removed = []
+            for t in self.atrias:  # go through all trias in area
+                if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
+                    trias_to_be_removed.append(t)
+            for t in trias_to_be_removed:
+                self.atrias.remove(t)  # tria is removed to be later replaced by trias from .obj
+        elif type == "default":  # default is filling gap
+            polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # False for not keeping inner trias\
+            # None for elevation as only new terrain should get elevation
+            borderv, log_info = sortPointsAlongPoly(borderv, poly)
+            self.log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
+            borderv = borderv[borderv.index(min(borderv)):] + borderv[:borderv.index(min(borderv))]
+            #  borderv start now with the most south-west corner
+            borderv.append(borderv[0])  # make it a closed poly
+            if not IsClockwise(borderv):
+                borderv.reverse()  # outer polygon for later triangulation should be clockwise
+            for v in borderv:
+                self.log.info("Border Vertex after Cut: {}".format(v))
+
+        obj_trias, obj_outline = read_obj_file(filename, logname, terrain, self)
+        match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
+
+        if type == "cut_obj_outline":  # now we have outline we can remove from current mesh via cut
+            borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
+            polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
+            ###### TBD: INSERT IN MESH borderv VERTICES IN CLOSE EDGES A F T E R  obj_trias have been inserted #########
+
+        if type == "exact_match":  # in case of exact match we remove all trias inside obj_outline
+            borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
+            trias_to_be_removed = []
+            for t in self.atrias:  # go through all trias in area
+                if PointInPoly(tria_center(*t[:3]), obj_outline):  # remove trias with center inside our imported mesh
+                    trias_to_be_removed.append(t)
+            for t in trias_to_be_removed:
+                self.atrias.remove(t)  # tria is removed to be later replaced by trias from .obj
+
+        kmlExport2(dsf, [borderland], self.atrias, filename + "_removed.kml")  ### TESTING ONLY - TB REMOVED  ALSO DSF PARAMETER FOR THIS FUNCTION !! ###
+
+        # insert all trias from .obj file in trias of that MUXP area
+        for t in obj_trias:
+            self.atrias.append(t)
+
+        if type == "exact_match_removal_poly":  # removal of trias already done above
+            borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
+
+        if type == "default":  # fil gap between existing dsf mesh and .obj map with trias of type default_terrain
+            patch_id_terrain = self.getPatchID(terrain)
+            borderland = borderv + obj_outline  # area between inner/outer poly to be triangulated, not closed for earclip
+            self.log.info("Borderland to be earclipped: {}".format(borderland))
+            trias = earclipTrias(borderland)
+            self.log.info("Earclip returned {} trias for {} vertices.".format(len(trias), len(borderland)))
+            for tria in trias:
+                new_v = [None, None, None]
+                for e in range(3):
+                    elev_found = False  # go through all existing vertices of trias to find elevation at coords
+                    for t in self.atrias:
+                        for v in range(3):
+                            if (round(tria[e][0], 7), round(tria[e][1], 7)) == (round(t[v][0], 7), round(t[v][1], 7)):
+                                elev = t[v][2]
+                                elev_found = True
+                                self.log.info("Elevation of borderland vertex {} is {}".format(tria[e], elev))
+                        if elev_found: break
+                    if not elev_found:
+                        self.log.error("No elevation found for borderland vertex: {}. Mesh not inserted!".format(tria[e]))
+                        return -2
+                    new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
+                    # This version only creates simple vertices without vertex normals and without s/t coordinates
+                self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patch_id_terrain])
+                self.log.info("Borderland Tria added: {}".format(self.atrias[-1]))
+                # As tria is completely new, there is no pool/patchID where tria is inside, so None
         return borderland
 
     def calculate_vertex_normals(self, poly):
