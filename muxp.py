@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.5b exp"
+muxp_VERSION = "0.3.5c exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -606,7 +606,7 @@ class muxpGUI:
             # in case of no issues of current file nothing to do, just stay with current file to be updated
             self.conflictStrategy = "CURRENT"
             return filename
-        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and update['version'] >= updateAlreadyInProps(update['id'], props[0]):
+        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and updateAlreadyInProps(update['id'], props[0]) is not None and update['version'] >= updateAlreadyInProps(update['id'], props[0]):
             # in case of no issues with original and the current file only includes the update with same or older version, it can be overwritten
             self.conflictStrategy = "ORIGINAL"
             return filenames[2]
@@ -1154,7 +1154,7 @@ class muxpGUI:
                 file_info = "# X-Plane Mesh Extract by MUXP (version: {})\n".format(muxp_VERSION)
                 file_info += "# from scenery pack: {}\n".format(self.dsf_sceneryPack)
                 file_info += "# dsf file hash: {}\n".format(self.dsf.FileHash)
-                a.extractMeshToObjFile(c["coordinates"], obj_filename, file_info)
+                a.extractMeshToObjFile(c["coordinates"], obj_filename, c["type"], file_info)
                 if self.kmlExport:
                     kmlExport2(self.dsf, [c["coordinates"]], a.atrias, kml_filename + "_{}".format(c_index + 1))
 

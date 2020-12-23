@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.5b exp
+# muxp_area.py    Version: 0.3.5c exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -698,7 +698,7 @@ class muxpArea:
             self.limitEdges(poly, limit) #shorten again
         ########## This funciton might be improved to go only through edges in new_trias instead starting from scratch in recursions
 
-    def extractMeshToObjFile(self, poly, filename, file_info="# MUXP Mesh extract"):
+    def extractMeshToObjFile(self, poly, filename, type_def, file_info="# MUXP Mesh extract"):
         """
         Extracts all pyhsical trias of area which are in poly to an Wavefront .obj File with filename.
         Existing files will be overwritten!
@@ -707,14 +707,22 @@ class muxpArea:
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         normals = dict()  # dictionary for vertex normals
         self.log.info("**** EXTRACTED VERTICES FOR OBJ FILE INCLUDING ELEVATIONS AS IS IN MEMORY *****")  ### TESTING ONLY ###
+
+        if type_def == "cut":
+            polysouter, polysinner, borderv = self.CutPoly(poly)  # just cut shape in mesh
+
         for t in self.atrias:  # go through all trias in area
             if not t[6]:  # Patch not defined for that tria
                 self.log.error("Patch does not exist for tria: {} --> not exported!!".format(t))
                 continue
-            if self.dsf.Patches[t[6]].flag:  # for the moment only export physical triangles !!!!!!
-                if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
+            if self.dsf.Patches[t[6]].flag == 1:  # for the moment only export physical triangles !!!!!!
+                if (type_def == "cut" and PointInPoly(tria_center(*t[:3]), poly)) or \
+                (PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly)):
+                    # in case of cut select trias with center point inside poly in case of default type select
+                    # all all trias with all vertices inside poly (no cut)
                     terrain_id = self.dsf.Patches[t[6]].defIndex
-                    if terrain_id not in extract_atrias:
+                    #self.log.info("Tria with flag {} and terrain {} to be exported: {}".format(self.dsf.Patches[t[6]].flag, terrain_id, t))
+                    if terrain_id not in extract_atrias.keys():
                         extract_atrias[terrain_id] = [deepcopy(t)]
                     else:
                         extract_atrias[terrain_id].append(deepcopy(t))  #### NEW: Deepcopy, to be able to change elevation without effect
@@ -745,8 +753,8 @@ class muxpArea:
             f.write("f 1//1 2//2 3//1\n")
             f.write("o MESH\n")
             for vc in vertices:
-                f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3), round(lat2y(vc[1]) - center[1], 3),
-                                              vertices[vc][0] - center[2]))
+                f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3),
+                                              round(lat2y(vc[1]) - center[1], 3), vertices[vc][0] - center[2]))
             for vn in normals:
                 f.write("vn {} {} {}\n".format(vn[0], vn[1], sqrt(1 - vn[0]*vn[0] - vn[1]*vn[1])))
             previous_written_material_name = None
@@ -799,14 +807,14 @@ class muxpArea:
                 self.log.info("Border Vertex after Cut: {}".format(v))
 
         obj_trias, obj_outline = read_obj_file(filename, logname, terrain, self)
-        match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
 
         if type == "cut_obj_outline":  # now we have outline we can remove from current mesh via cut
             borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
             polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
-            ###### TBD: INSERT IN MESH borderv VERTICES IN CLOSE EDGES A F T E R  obj_trias have been inserted #########
+            match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
 
         if type == "exact_match":  # in case of exact match we remove all trias inside obj_outline
+            match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
             trias_to_be_removed = []
             for t in self.atrias:  # go through all trias in area
@@ -820,6 +828,10 @@ class muxpArea:
         # insert all trias from .obj file in trias of that MUXP area
         for t in obj_trias:
             self.atrias.append(t)
+
+        if type == "cut_obj_outline":  # in case of cut we need to insert vertices of cut also in added obj_trias
+            for vertex in borderv:
+                self.splitCloseEdges(vertex)
 
         if type == "exact_match_removal_poly":  # removal of trias already done above
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
