@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.5c exp
+# muxp_area.py    Version: 0.3.5d exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -706,18 +706,21 @@ class muxpArea:
         extract_atrias = dict()  # dictionary of lists of area trias, that have to be extracted; keys are IDs of patches they belong to
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         normals = dict()  # dictionary for vertex normals
+        v_raster_elev = dict()  # dictionary with True as value in case elevation at coordinates is from raster
         self.log.info("**** EXTRACTED VERTICES FOR OBJ FILE INCLUDING ELEVATIONS AS IS IN MEMORY *****")  ### TESTING ONLY ###
 
-        if type_def == "cut":
+        select_from_cut = False
+        if type_def.find("inside_polygon") < 0:  # using cut option is default
             polysouter, polysinner, borderv = self.CutPoly(poly)  # just cut shape in mesh
+            select_from_cut = True
 
         for t in self.atrias:  # go through all trias in area
             if not t[6]:  # Patch not defined for that tria
                 self.log.error("Patch does not exist for tria: {} --> not exported!!".format(t))
                 continue
             if self.dsf.Patches[t[6]].flag == 1:  # for the moment only export physical triangles !!!!!!
-                if (type_def == "cut" and PointInPoly(tria_center(*t[:3]), poly)) or \
-                (PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly)):
+                if (select_from_cut and PointInPoly(tria_center(*t[:3]), poly)) or \
+                        (PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly)):
                     # in case of cut select trias with center point inside poly in case of default type select
                     # all all trias with all vertices inside poly (no cut)
                     terrain_id = self.dsf.Patches[t[6]].defIndex
@@ -725,36 +728,52 @@ class muxpArea:
                     if terrain_id not in extract_atrias.keys():
                         extract_atrias[terrain_id] = [deepcopy(t)]
                     else:
-                        extract_atrias[terrain_id].append(deepcopy(t))  #### NEW: Deepcopy, to be able to change elevation without effect
+                        extract_atrias[terrain_id].append(deepcopy(t))  # deepcopy, to be able to change elevation
                     for v in range(3):
                         extract_atrias[terrain_id][-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
                         vc = (round(t[v][0], 7), round(t[v][1], 7))
                         vn = (round(t[v][3], 4), round(t[v][4], 4))
                         self.log.info("{}  elev: {}".format(vc, t[v][2]))  ### TESTING ONLY ####
                         if vc not in vertices:
-                            #vertices[vc] = [t[v][2], len(vertices)]
                             vertices[vc] = [self.dsf.getVertexElevation(*t[v][:3]), len(vertices)]
-                            ###### NEW: use always the elevation, no raster value -32768
+                            # use always the elevation, but have info if raster elevation was used
+                            if t[v][2] == -32768:
+                                v_raster_elev[vc] = True
                         if vn not in normals:
                             normals[vn] = len(normals)
-        center = CenterInAtrias(extract_atrias)
+
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
+            center_lines_offset = 0  # in case of non centric export we have not v and vn for CENTER COORDINATES
             f.write(file_info)
-            f.write("o CENTER_Coordinates\n")
-            f.write("# coordinates relative to center: {} {} {}\n".format(center[0], center[1], center[2]))
-            center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercator projection
-            center[2] = round(center[2])  # center elevation also full meter
-            f.write("# used in Mercator projection: {} {} {}\n".format(center[0], center[1], center[2]))
-            for i in range(3):
-                f.write("v {} ".format((int(center[i] / 1000000)) / 1000))
-                f.write("{}".format(int((center[i] - (int(center[i] / 1000000) * 1000000)) / 1000) / 1000))
-                f.write(" {}\n".format((center[i] - (int(center[i] / 1000)) * 1000) / 1000))
-            f.write("vn 0 0 1\n")
-            f.write("f 1//1 2//2 3//1\n")
+            if type_def.find("non_centric") < 0:
+                center = CenterInAtrias(extract_atrias)
+                center_lines_offset = 1  # we need 3 lines for v and line vn for center coordinates
+                f.write("o CENTER_Coordinates\n")
+                f.write("# coordinates relative to center: {} {} {}\n".format(center[0], center[1], center[2]))
+                if type_def.find("xp_coordinates") < 0:  # Mercator projection is default
+                    center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercator projection
+                    center[2] = round(center[2])  # center elevation also full meter
+                    f.write("# used in Mercator projection: {} {} {}\n".format(center[0], center[1], center[2]))
+                for i in range(3):  # Write center coordinates down scaled, so that it is nearly not visible
+                    f.write("v {} ".format((int(center[i] / 1000000)) / 1000))
+                    f.write("{}".format(int((center[i] - (int(center[i] / 1000000) * 1000000)) / 1000) / 1000))
+                    f.write(" {}\n".format((center[i] - (int(center[i] / 1000)) * 1000) / 1000))
+                f.write("vn 0 0 1\n")
+                f.write("f 1//1 2//2 3//1\n")
+            else:  # non centric export
+                center = [0, 0, 0]
             f.write("o MESH\n")
-            for vc in vertices:
-                f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3),
-                                              round(lat2y(vc[1]) - center[1], 3), vertices[vc][0] - center[2]))
+            if type_def.find("xp_coordinates") < 0:  # Mercator is default
+                for vc in vertices:
+                    f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3),
+                                                  round(lat2y(vc[1]) - center[1], 3), vertices[vc][0] - center[2]))
+            else:
+                for vc in vertices:
+                    v_string = "v {} {} {}".format(round(vc[0] - center[0], 3),
+                                                   round(vc[1] - center[1], 3), vertices[vc][0] - center[2])
+                    if vc in v_raster_elev:
+                        v_string += "  # elev from raster"
+                    f.write("{}\n".format(v_string))
             for vn in normals:
                 f.write("vn {} {} {}\n".format(vn[0], vn[1], sqrt(1 - vn[0]*vn[0] - vn[1]*vn[1])))
             previous_written_material_name = None
@@ -772,8 +791,10 @@ class muxpArea:
                 for t in extract_atrias[terrain_id]:
                     f.write("f")
                     for v in range(3):
-                        f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] + 4, normals[(round(t[v][3], 4), round(t[v][4], 4))] + 2))
-                        # +4 / +2 as in .obj indices start with 1 instead 0 and for center 3 vertices and 1 normal added
+                        f.write(" {}//{}".format(vertices[(round(t[v][0], 7), round(t[v][1], 7))][1] +
+                                                 3 * center_lines_offset + 1,  # 3 CENTER v coordinates + start at 1
+                                                 normals[(round(t[v][3], 4), round(t[v][4], 4))] +
+                                                 center_lines_offset + 1))  # 1 CENTER vn coordinate + start at 1
                     f.write("\n")
 
     def insertMeshFromObjFile(self, filename, logname, poly, terrain, type, dsf):
