@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.5c exp"
+muxp_VERSION = "0.3.5e exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1230,6 +1230,7 @@ class muxpGUI:
                 for p in c["3d_coordinates"]:
                     coords.append([p[1], p[0]])  # 3d_coordinates need still to be swapped
                     elevations.append(p[2])
+                coords_original = deepcopy(coords)  # save coords as they might be changed by ordering when cutting etc.
                 coords.insert(0, [2*coords[0][0] - coords[1][0], 2*coords[0][1] - coords[1][1]])
                 # add helping points at beginning and end of coords which extend first/last segment for correct stretch
                 coords.append([2*coords[-1][0] - coords[-2][0], 2*coords[-1][1] - coords[-2][1]])
@@ -1242,7 +1243,9 @@ class muxpGUI:
                 poly.append(poly[0])  # make it a closed poly for cutting
                 log.info("Cutted Path is inside poly: {}".format(poly))
                 polysouter, polysinner, borderv = a.CutPoly(poly, 333333)  # elevation-placeholder
-                a.set_path_elevation(coords, poly_l, poly_r, elevations)
+                log.info("Coords after cut: {}".format(coords))
+                log.info("Cutting Path for coords: {}\n   and elevations: {}".format(coords_original, elevations))
+                a.set_path_elevation(coords_original, c["width"], poly_l, poly_r, elevations)
                 shown_polys = polysouter
                 for pol in shown_polys:
                     pol.append(pol[0])  #polys are returned without last vertex beeing same as first

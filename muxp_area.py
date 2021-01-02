@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.5d exp
+# muxp_area.py    Version: 0.3.5e exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -1382,7 +1382,7 @@ class muxpArea:
             self.log.error("Unknown type: {}  used in command. Ignored.".format(c["type"]))
             return []
 
-    def set_path_elevation(self, coords, left, right, elev):
+    def set_path_elevation(self, coords, width, left, right, elev):
         """
         For a path given by coordinates including left and right points to have width of the path and
         elevation give, adapts the elevation for points that are on this path dependent on these elevation points.
@@ -1393,6 +1393,8 @@ class muxpArea:
                     for i in range(len(coords)-1):
                         ortho_point = [coords[i][0]+coords[i+1][1]-coords[i][1], coords[i][1]+coords[i][0]-coords[i+1][0]]
                         line_dist, inside = PointLocationInTria(v, [coords[i+1], ortho_point, coords[i]])
+                        if abs(inside) > 1 + width/2:  # outside of current path-segment (+1 as epsilon)
+                            continue
                         if line_dist <= 0:  # point lies in previous segment or at beginning
                             v[2] = elev[i]
                             break
