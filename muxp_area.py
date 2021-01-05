@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.5e exp
+# muxp_area.py    Version: 0.3.6 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -707,7 +707,6 @@ class muxpArea:
         vertices = dict()  # dictionary for unique coordinates of trias as keys and [elevation, index] as value
         normals = dict()  # dictionary for vertex normals
         v_raster_elev = dict()  # dictionary with True as value in case elevation at coordinates is from raster
-        self.log.info("**** EXTRACTED VERTICES FOR OBJ FILE INCLUDING ELEVATIONS AS IS IN MEMORY *****")  ### TESTING ONLY ###
 
         select_from_cut = False
         if type_def.find("inside_polygon") < 0:  # using cut option is default
@@ -733,7 +732,6 @@ class muxpArea:
                         extract_atrias[terrain_id][-1][v][2] = self.dsf.getVertexElevation(*t[v][:3])  #### NEW: use elevation, no raster value
                         vc = (round(t[v][0], 7), round(t[v][1], 7))
                         vn = (round(t[v][3], 4), round(t[v][4], 4))
-                        self.log.info("{}  elev: {}".format(vc, t[v][2]))  ### TESTING ONLY ####
                         if vc not in vertices:
                             vertices[vc] = [self.dsf.getVertexElevation(*t[v][:3]), len(vertices)]
                             # use always the elevation, but have info if raster elevation was used
@@ -745,35 +743,59 @@ class muxpArea:
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
             center_lines_offset = 0  # in case of non centric export we have not v and vn for CENTER COORDINATES
             f.write(file_info)
-            if type_def.find("non_centric") < 0:
+            f.write("# Coordinates given are x (longitude), y (latitude, forward), z (elevation, up)\n")
+            # Calculate center of mesh area to be exported
+            if type_def.find("non_centric") < 0:  # default is centric
                 center = CenterInAtrias(extract_atrias)
+                if type_def.find("center4elevation") < 0:
+                    center[2] = 0  # keep elevation as above seal level and do not center (default setting)
                 center_lines_offset = 1  # we need 3 lines for v and line vn for center coordinates
                 f.write("o CENTER_Coordinates\n")
                 f.write("# coordinates relative to center: {} {} {}\n".format(center[0], center[1], center[2]))
-                if type_def.find("xp_coordinates") < 0:  # Mercator projection is default
+                if type_def.find("ercator") >= 0:  # for matching merctor and Mercator
                     center[0], center[1] = round(lon2x(center[0])), round(lat2y(center[1]))  # use Mercator projection
                     center[2] = round(center[2])  # center elevation also full meter
                     f.write("# used in Mercator projection: {} {} {}\n".format(center[0], center[1], center[2]))
-                for i in range(3):  # Write center coordinates down scaled, so that it is nearly not visible
-                    f.write("v {} ".format((int(center[i] / 1000000)) / 1000))
-                    f.write("{}".format(int((center[i] - (int(center[i] / 1000000) * 1000000)) / 1000) / 1000))
-                    f.write(" {}\n".format((center[i] - (int(center[i] / 1000)) * 1000) / 1000))
+                    for i in range(3):  # Write center coordinates down scaled, so that it is nearly not visible
+                        f.write("v {} ".format((int(center[i] / 1000000)) / 1000))
+                        f.write("{}".format(int((center[i] - (int(center[i] / 1000000) * 1000000)) / 1000) / 1000))
+                        f.write(" {}\n".format((center[i] - (int(center[i] / 1000)) * 1000) / 1000))
+                else:  # for degrees lower down scaling as numbers are smaller (also true for meters)
+                    for i in range(3):
+                        f.write("v {} {} {}\n".format(int(center[i])/1000, int((center[i] - int(center[i]))*10000)/10000, int((center[i]*10000 - int(center[i]*10000))*10000)/10000))
                 f.write("vn 0 0 1\n")
                 f.write("f 1//1 2//2 3//1\n")
+
+                # Give information on required scaling in order to retrieve view in meters / only useful when centered
+                if type_def.find("degrees") >= 0:
+                    x_scal, y_scal, z_scal = distance_vector(center, [center[0] + 1, center[1] + 1, 0])
+                    f.write("# Scale x axis by {} and y axis by {} for having meters as scale\n".format(round(x_scal), round(y_scal)))
+                elif type_def.find("ercator") >= 0:  # for finding Mercator and mercator
+                    x_scal, y_scal, z_scal = distance_vector([x2lon(center[0]), y2lat(center[1]), 0], [x2lon(center[0] + 1), y2lat(center[1] + 1), 0])
+                    f.write("# Scale x axis by {} and y axis by {} for having meters as scale\n".format(x_scal, y_scal))
+                elif type_def.find("meters") >= 0:
+                    f.write("# Vertices are given in meters x, y, z distances to center\n")
+
             else:  # non centric export
                 center = [0, 0, 0]
+
+            # Write Coordinates of Mesh
             f.write("o MESH\n")
-            if type_def.find("xp_coordinates") < 0:  # Mercator is default
+            if type_def.find("ercator") >= 0:  # matching mercator and Mercator
                 for vc in vertices:
                     f.write("v {} {} {}\n".format(round(lon2x(vc[0]) - center[0], 3),
                                                   round(lat2y(vc[1]) - center[1], 3), vertices[vc][0] - center[2]))
-            else:
+            elif type_def.find("degrees") >= 0:
                 for vc in vertices:
-                    v_string = "v {} {} {}".format(round(vc[0] - center[0], 3),
-                                                   round(vc[1] - center[1], 3), vertices[vc][0] - center[2])
+                    v_string = "v {} {} {}".format(round(vc[0] - center[0], 8),
+                                                   round(vc[1] - center[1], 8), vertices[vc][0] - center[2])
                     if vc in v_raster_elev:
                         v_string += "  # elev from raster"
                     f.write("{}\n".format(v_string))
+            elif type_def.find("meters"):  # export to meters distances from center
+                for vc in vertices:
+                    x_diff, y_diff, z_diff = distance_vector(center, [vc[0], vc[1], vertices[vc][0]])
+                    f.write("v {} {} {}\n".format(round(x_diff, 2), round(y_diff, 2), round(z_diff, 2)))
             for vn in normals:
                 f.write("vn {} {} {}\n".format(vn[0], vn[1], sqrt(1 - vn[0]*vn[0] - vn[1]*vn[1])))
             previous_written_material_name = None
@@ -797,7 +819,7 @@ class muxpArea:
                                                  center_lines_offset + 1))  # 1 CENTER vn coordinate + start at 1
                     f.write("\n")
 
-    def insertMeshFromObjFile(self, filename, logname, poly, terrain, type, dsf):
+    def insertMeshFromObjFile(self, filename, logname, poly, terrain, type_def):
         """
         Inserts mesh with only physical trias from an .obj filename and inserts it in area.
         The outer polygon of file-mesh is connected to the poly using triangulation. All this
@@ -807,14 +829,24 @@ class muxpArea:
         To have room for the mesh, the mesh is first cut by poly and all inner trias are removed.
         """
         self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
-        if type == "exact_match_removal_poly":  # the shape of inserting mesh must have same edges as existing mesh in dsf
+        obj_trias, obj_outline = read_obj_file(filename, logname, terrain, type_def, self)
+
+        if type_def.find("same_outline_inside_polygon") >= 0:  # the shape of inserting mesh must have same edges as existing mesh in dsf
+            # this type will remove same trias as when mesh was extracted, if insterted mesh still has same outline it worsk
+            # actually this type is not needed any more as exact_match can be used and no coordinates are needed
             trias_to_be_removed = []
             for t in self.atrias:  # go through all trias in area
                 if PointInPoly(t[0][0:2], poly) and PointInPoly(t[1][0:2], poly) and PointInPoly(t[2][0:2], poly):
                     trias_to_be_removed.append(t)
             for t in trias_to_be_removed:
                 self.atrias.remove(t)  # tria is removed to be later replaced by trias from .obj
-        elif type == "default":  # default is filling gap
+
+        elif type_def.find("same_cut") >= 0:  # coordinates define same cut as for extraction, so just cut and insert
+            # Works only if used on exact the same mesh!
+            polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # delete inner trias, don't give elevation
+            borderland = obj_outline  # exact match with cut, no borderland;
+
+        elif type_def.find("fill_gap") >= 0:  # remove trias in poly, insert mesh and fill gap with given terrain
             polysouter, polysinner, borderv = self.CutPoly(poly, None, False)  # False for not keeping inner trias\
             # None for elevation as only new terrain should get elevation
             borderv, log_info = sortPointsAlongPoly(borderv, poly)
@@ -827,14 +859,12 @@ class muxpArea:
             for v in borderv:
                 self.log.info("Border Vertex after Cut: {}".format(v))
 
-        obj_trias, obj_outline = read_obj_file(filename, logname, terrain, self)
-
-        if type == "cut_obj_outline":  # now we have outline we can remove from current mesh via cut
+        elif type_def.find("cut_obj_outline") >= 0:  # now we have outline we can remove from current mesh via cut
             borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
             polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
             match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
 
-        if type == "exact_match":  # in case of exact match we remove all trias inside obj_outline
+        elif type_def.find("exact_match") >= 0:  # in case of exact match we remove all trias inside obj_outline
             match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
             trias_to_be_removed = []
@@ -844,20 +874,26 @@ class muxpArea:
             for t in trias_to_be_removed:
                 self.atrias.remove(t)  # tria is removed to be later replaced by trias from .obj
 
-        kmlExport2(dsf, [borderland], self.atrias, filename + "_removed.kml")  ### TESTING ONLY - TB REMOVED  ALSO DSF PARAMETER FOR THIS FUNCTION !! ###
+        else:  # cut_obj_outline is default type, now we have outline and can remove it from current mesh via cut
+            # This is the default type as it should always work and does not need coordinates
+            borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
+            polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
+            match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
+
+        # kmlExport2(self.dsf, [obj_outline], self.atrias, filename + "_removed.kml")  ### TESTING ONLY
 
         # insert all trias from .obj file in trias of that MUXP area
         for t in obj_trias:
             self.atrias.append(t)
 
-        if type == "cut_obj_outline":  # in case of cut we need to insert vertices of cut also in added obj_trias
+        if type_def.find("cut_obj_outline") >= 0:  # in case of cut we need to insert vertices of cut also in added obj_trias
             for vertex in borderv:
                 self.splitCloseEdges(vertex)
 
-        if type == "exact_match_removal_poly":  # removal of trias already done above
+        elif type_def.find("same_outline_inside_polygon") >= 0:  # removal of trias already done above
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
 
-        if type == "default":  # fil gap between existing dsf mesh and .obj map with trias of type default_terrain
+        elif type_def.find("fill_gap") >= 0:  # fil gap between existing dsf mesh and .obj map with trias of type default_terrain
             patch_id_terrain = self.getPatchID(terrain)
             borderland = borderv + obj_outline  # area between inner/outer poly to be triangulated, not closed for earclip
             self.log.info("Borderland to be earclipped: {}".format(borderland))

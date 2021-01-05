@@ -1,14 +1,14 @@
-# obj_ex_import.py    Version: 0.3.5b exp
+# obj_ex_import.py    Version: 0.3.6 exp
 # ---------------------------------------------------------
 # MUXP functions for exporting and importing X-Plane Mesh
 # to/from Wavefront .obj files
 
 from logging import getLogger
 from math import sqrt
-from muxp_math import x2lon, y2lat, IsClockwise
+from muxp_math import x2lon, y2lat, IsClockwise, distances2coordinates
 
 
-def read_obj_file(filename, logname, default_terrain, area):
+def read_obj_file(filename, logname, default_terrain, type_def, area):
     """
     Reads .obj filename and adapts muxp area trias with this new mesh
     default_terrain is the terrain that will be used for are trias if nothing else is defined
@@ -41,7 +41,10 @@ def read_obj_file(filename, logname, default_terrain, area):
                 except (ValueError, IndexError):
                     log.info("Line in .obj file defining v does not contain three floats but {}".format(v))
                     return []
-                center.append(v[0] * 10 ** 9 + v[1] * 10 ** 6 + v[2] * 1000)
+                if type_def.find("ercator") >= 0:  # matching mercartor and Mercator
+                    center.append(v[0] * 10 ** 9 + v[1] * 10 ** 6 + v[2] * 1000)
+                else:  # for degress
+                    center.append(v[0] * 1000 + v[1] + v[2] / 10000)
                 vertices.append(v)  # append also if not needed for mesh, but relevant for indexing in faces
             elif line.find("v ") == 0 and current_object == "MESH":  # mesh vertex definition in .obj file
                 v = line.split()
@@ -84,7 +87,8 @@ def read_obj_file(filename, logname, default_terrain, area):
                         log.error("Line in .obj file defining f does not have correct integers but {}".format(f))
                         return []
                 for i in range(3):
-                    t.append(vertices[fv[i]])
+                    # t.append(vertices[fv[i]])  ### NEW: append vertex coordinates later, when coordinates have been calculated
+                    t.append(fv[i])  # for the moment just store index to vertex number
                     if fv[i] < fv[(i + 1) % 3]:
                         edge_sorted = (fv[i], fv[(i + 1) % 3])
                     else:
@@ -96,27 +100,50 @@ def read_obj_file(filename, logname, default_terrain, area):
                 for i in range(3):
                     vnx, vny, vnz = normals[fvn[i]][0], normals[fvn[i]][1], normals[fvn[i]][2]
                     ln = sqrt(vnx * vnx + vny * vny + vnz * vnz)  # length of vertex normal
-                    t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
+                    #t[i] = t[i] + [round(vnx / ln, 4), round(vny / ln, 4)]
+                    t.append([round(vnx / ln, 4), round(vny / ln, 4)])
                 trias.append(t)
             elif line.find("usemtl ") == 0 and current_object == "MESH":  # change of material / terrain type
                 mat = line.split()
                 material.append([len(trias), mat[1]])
                 
     # Basic checks if read data is okay
-    log.info("Mesh .obj file read with center-offset (Mercator): {}".format(center))
-    if len(center) < 3:
-        log.error("Read .obj file has no object CENTER for coordinate offset. Mesh not inserted!")
+    if len(center) >= 3:
+        if type_def.find("ercator") >= 0:  # matching mercator and Mercator
+            log.info("Mesh .obj file read with center-offset (Mercator): {}".format(center))
+        else:
+            log.info("Mesh .obj file read with center-offset (degrees): {}".format(center))
+        if len(center) > 3:
+            log.warning("CENTER object had more than 3 vertices, the additional ones are ignored!")
+    elif len(center) == 0:
+        log.warning("Read .obj file has no object CENTER for coordinate offset. Using [0, 0, 0] as center!")
+        center = [0, 0, 0]
+    else:
+        log.error("Read .obj file has no object CENTER has less than 3 coordinates/vertices. Mesh not inserted!")
         return []
     if len(vertices) < 6:
         log.error("Read .obj file has no triangle defined or object MESH missing. Mesh not inserted!")
         return []
     
-    # Convert coordinates of vertices back from Mercator
-    for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
-        # log.info("Converting Vertex {} to Mercator.".format(vertices[i]))
-        if len(vertices[i]) >= 3:
-            vertices[i] = [x2lon(vertices[i][0] + center[0]), y2lat(vertices[i][1] + center[1]),
-                           vertices[i][2] + center[2]]
+    # Convert coordinates of vertices back to full degrees without CENTER
+
+    if type_def.find("ercator") >= 0:  # matching mercator and Mercator
+        for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
+            if len(vertices[i]) >= 3:
+                vertices[i] = [x2lon(vertices[i][0] + center[0]), y2lat(vertices[i][1] + center[1]),
+                               vertices[i][2] + center[2]]
+    elif type_def.find("degrees") >= 0:
+        for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
+            log.info("Converting obj-vertex {}".format(vertices[i]))  # JUST TESTING, TO BE REMOVED
+            if len(vertices[i]) >= 3:
+                vertices[i] = [vertices[i][0] + center[0], vertices[i][1] + center[1], vertices[i][2] + center[2]]
+            log.info("   to: {}".format(vertices[i]))  # JUST TESTING, TO BE REMOVED
+    elif type_def.find("meters") >= 0:  # default encoding is meters difference from center
+        for i in range(len(vertices)):  # as vertices needed below also add offset and convert back from Mercator
+            log.info("Converting obj-vertex {}".format(vertices[i]))  # JUST TESTING, TO BE REMOVED
+            if len(vertices[i]) >= 3:
+                vertices[i] = distances2coordinates(center, vertices[i])
+            log.info("   to: {}".format(vertices[i]))  # JUST TESTING, TO BE REMOVED
 
     # Define now MUXP area trias including their correct coordinates and terrain
     patch_id_terrain = area.getPatchID(default_terrain)  # WARNING: This new patch has still no poolDefintion in first Command!
@@ -135,12 +162,14 @@ def read_obj_file(filename, logname, default_terrain, area):
                 patch_id = patch_id_terrain
                 log.info("Starting with tria number {} to use material/terrain: {}".format(tria_num, default_terrain))
             material_index += 1
-        # log.info("Tria in Mercator offset: {}".format(tria))  ##### TESTING ONLY #######
+        # log.info("Tria in old e.g. Mercator offset: {}".format(tria))  ##### TESTING ONLY #######
         new_v = [None, None, None]
         for e in range(3):
             # For the vertex also center-offset is added and converted back from Mercator to degrees
-            new_v[e] = [x2lon(tria[e][0] + center[0]), y2lat(tria[e][1] + center[1]), tria[e][2] + center[2],
-                        tria[e][3], tria[e][4]]
+            # new_v[e] = [x2lon(tria[e][0] + center[0]), y2lat(tria[e][1] + center[1]), tria[e][2] + center[2],
+            #           tria[e][3], tria[e][4]]
+            new_v[e] = [vertices[tria[e]][0], vertices[tria[e]][1], vertices[tria[e]][2], tria[e+3][0], tria[e+3][1]]  # NEW: use index to vertices where coordinates have now been calculated above
+            # log.info("   vertex {}: {}".format(e, new_v[e]))
             # This version only creates simple vertices without s/t coordinates
         area_trias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patch_id])
         # As tria is completely new, there is no pool/patchID where tria is inside, so None

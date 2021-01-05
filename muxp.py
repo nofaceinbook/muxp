@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.5e exp"
+muxp_VERSION = "0.3.6 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -962,6 +962,8 @@ class muxpGUI:
                 showRunResult(".obj file for insertion not found", "Mesh not inserted!", True)
             elif muxp_process_error == -11:
                 showRunResult("Error loading .obj file!", "Mesh not inserted (refer log for details)", True)
+            elif muxp_process_error == -12:
+                showRunResult("This type of mesh insertion requires coordinates!", "Mesh not inserted", True)
             else:
                 showRunResult("Error {} while updating mesh".format(muxp_process_error), "No update saved!", True)
             return muxp_process_error #No writing of dsf file in case of error
@@ -1150,6 +1152,8 @@ class muxpGUI:
                     log.info("extract mesh command has no name attribute; using default name: {}".format(obj_filename))
                 else:
                     obj_filename = path.join(head, c["name"])
+                if c["type"].find("ercator") < 0 and c["type"].find("degrees") < 0 and c["type"].find("meters") < 0:
+                    c["type"] += "&mercator"  # set Mercator projection as default if nothing else was defined
                 log.info("Extract mesh in polygon: {} to file {}".format(c["coordinates"], obj_filename))
                 file_info = "# X-Plane Mesh Extract by MUXP (version: {})\n".format(muxp_VERSION)
                 file_info += "# from scenery pack: {}\n".format(self.dsf_sceneryPack)
@@ -1167,7 +1171,17 @@ class muxpGUI:
                     obj_filename = path.join(head, c["name"])
                 if not path.isfile(obj_filename):  # Error that insertion file not existent
                     return -10
-                borderlandpoly = a.insertMeshFromObjFile(obj_filename, LogName, c["coordinates"], c["terrain"], c["type"], self.dsf)
+                if "terrain" not in c:
+                    c["terrain"] = "lib/g10/terrain10/apt_tmp_rain.ter"  # just some default green gras terrain
+                if c["type"].find("same_cut") >= 0 or c["type"].find("fill_gap") >= 0 or c["type"].find("same_outline_inside_polygon") >= 0:
+                    # These types require that polygon is given for cuts where mesh will be inserted
+                    if "coordinates" not in c:
+                        return -12
+                if "coordinates" not in c:  # coordinates are not required for this type
+                    c["coordinates"] = []  # so just set to empty if not present
+                if c["type"].find("ercator") < 0 and c["type"].find("degrees") < 0 and c["type"].find("meters") < 0:
+                    c["type"] += "&mercator"  # set Mercator projection as default if nothing else was defined
+                borderlandpoly = a.insertMeshFromObjFile(obj_filename, LogName, c["coordinates"], c["terrain"], c["type"])
                 if len(borderlandpoly) == 0:  # Error occurred when inserting
                     return -11
                 # elevation_scale = 0.05  # is now default value and configurable in MUXP File

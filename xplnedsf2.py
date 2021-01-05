@@ -1,6 +1,6 @@
 #******************************************************************************
 #
-# xplnedsf2.py        Version 0.5.8  for muxp
+# xplnedsf2.py        Version 0.5.9  for muxp
 # ---------------------------------------------------------
 # Python module for reading and writing X_Plane DSF files.
 #
@@ -29,6 +29,7 @@
 ### NEW 0.5.6: Added separate function isDSFoverlay(file) to test whether a dsf file is an overlay
 ###            Checking out of bound when packing raster values (might be removed again!)
 ### NEW 0.5.7: Returning error coder for getDSFproperties()
+### NEW 0.5.9: Allowing empty DEFN sub atoms, especially for DEMN supporting dsf files for X-Plane 10
 
 from os import path, stat #required to retrieve length of dsf-file
 from struct import pack, unpack #required for binary pack and unpack
@@ -204,7 +205,8 @@ class XPLNEDSF:
                     for a in self._Atoms_[sub_id]: #for multiple atoms we have to add length of each instance
                         l += len(a) + 8  # add 8 bytes for each AtomID + Length header
             else: #for single atoms just lengths of atom
-                l += len(self._Atoms_[sub_id]) + 8 # add 8 bytes for AtomID + Length header
+                if sub_id in self._Atoms_:
+                    l += len(self._Atoms_[sub_id]) + 8 # add 8 bytes for AtomID + Length header
         return l + 8  # add 8 for header of TopAtom itself
 
     
@@ -243,25 +245,44 @@ class XPLNEDSF:
 
      
     def _extractDefs_(self): #extracts the definition (DEFN) atoms TERT, OBJT, POLY, NETW, DEMN and stores them in dictionarys
-        l = self._GetStrings_(self._Atoms_['TRET'])
-        self.DefTerrains = dict(zip(range(len(l)), l))
-        l = self._GetStrings_(self._Atoms_['TJBO'])
-        self.DefObjects = dict(zip(range(len(l)), l))
-        l = self._GetStrings_(self._Atoms_['YLOP'])
-        self.DefPolygons = dict(zip(range(len(l)), l))
-        l = self._GetStrings_(self._Atoms_['WTEN'])
-        self.DefNetworks = dict(zip(range(len(l)), l))        
-        l = self._GetStrings_(self._Atoms_['NMED'])
-        self.DefRasters = dict(zip(range(len(l)), l))
+        if 'TRET' in self._Atoms_:
+            l = self._GetStrings_(self._Atoms_['TRET'])
+            self.DefTerrains = dict(zip(range(len(l)), l))
+        else:
+            self._log_.warning("This dsf file has no TERT atom (Terrain Definitions)!")
+        if 'TJBO' in self._Atoms_:
+            l = self._GetStrings_(self._Atoms_['TJBO'])
+            self.DefObjects = dict(zip(range(len(l)), l))
+        else:
+            self._log_.warning("This dsf file has no OBJT atom (Object Definitions)!")
+        if 'YLOP' in self._Atoms_:
+            l = self._GetStrings_(self._Atoms_['YLOP'])
+            self.DefPolygons = dict(zip(range(len(l)), l))
+        else:
+            self._log_.warning("This dsf file has no POLY atom (Polygon Definitions)!")
+        if 'WTEN' in self._Atoms_:
+            l = self._GetStrings_(self._Atoms_['WTEN'])
+            self.DefNetworks = dict(zip(range(len(l)), l))
+        else:
+            self._log_.warning("This dsf file has no NETW atom (Network Definitions)!")
+        if 'NMED' in self._Atoms_:
+            l = self._GetStrings_(self._Atoms_['NMED'])
+            self.DefRasters = dict(zip(range(len(l)), l))
+        else:
+            self._log_.warning("This dsf file has no DEMN atom (Raster Definitions)!")
         self._updateProgress_(self._TopAtomLength_('NFED'))
 
         
-    def _encodeDefs_(self): #encodes the definition dictionaries in dsf object to (DEFN) atoms     
+    def _encodeDefs_(self): #encodes the definition dictionaries in dsf object to (DEFN) atoms
         self._Atoms_['TRET'] = self._PutStrings_(self.DefTerrains)
         self._Atoms_['TJBO'] = self._PutStrings_(self.DefObjects)
         self._Atoms_['YLOP'] = self._PutStrings_(self.DefPolygons)
         self._Atoms_['WTEN'] = self._PutStrings_(self.DefNetworks)
-        self._Atoms_['NMED'] = self._PutStrings_(self.DefRasters)
+        if 'NMED' in self._Atoms_ or len(self.DefRasters) > 0:  # skip writing DEMN atom for XP versions older v 10
+            self._Atoms_['NMED'] = self._PutStrings_(self.DefRasters)
+        else:
+            self._log_.warning("No DEMN atom (raster definition) was present and none defined so skipped writing it!")
+
 
 
         

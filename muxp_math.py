@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.5b exp
+# muxp_math.py   Version: 0.3.6 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -90,6 +90,11 @@ def distance_vector(p, q):  # returns x, y, z distances for as vector for two po
     lat_degree_dist_average = 111000
     degree_dist_at_lat = cos(radians(p[1])) * 111120  # latest is degree_dist_at_equator
     return [(q[0] - p[0])*degree_dist_at_lat, (q[1] - p[1])*lat_degree_dist_average, q[2] - p[2]]
+
+def distances2coordinates(p, dist):  # returns coordinates for point q which is vector of distances in m away from p
+    lat_degree_dist_average = 111000
+    degree_dist_at_lat = cos(radians(p[1])) * 111120  # latest is degree_dist_at_equator
+    return [p[0] + dist[0]/degree_dist_at_lat, p[1] + dist[1]/lat_degree_dist_average, dist[2] - p[2]]
 
 def edgeDistance(p, a, b): #calculates distance of point p to edge e from a to b
     vector_ab = (b[0] - a[0], b[1] - a[1])

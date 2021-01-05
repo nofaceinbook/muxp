@@ -1,4 +1,4 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.35
+SUPPORTED_MUXP_FILE_VERSION = 0.36
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 
@@ -50,7 +50,7 @@ MUST_COMMAND_PARAMETERS = {"cut_polygon": ["coordinates"],
                            "update_raster4spline_segment": ["3d_coordinates", "width"],
                            "update_elevation_in_poly": ["coordinates"],  # optionally either set flat by elevation or ramp by 3 3d_cooridinates
                            "extract_mesh_to_file": ["coordinates"],
-                           "insert_mesh_from_file": ["coordinates", "terrain"],
+                           "insert_mesh_from_file": [],  # NEW: Default terrain will be given when not present, some types take coordinates from .obj outline
                            "exit_without_update": [],
                            "unflatten_default_apt": ["name"],
                            "calculate_vertex_normals": ["coordinates"]}
