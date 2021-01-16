@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.3.5 exp
+# muxp_file.py    Version: 0.3.7 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -104,7 +104,7 @@ def validate_muxp(d, logname):
         if obv not in d:
             d[obv] = ""
     ### CONVERT OPTIONAL VALUES THAT ARE NO STRING
-    if d["elevation_step"] != "":
+    if d["elevation_step"] != "" and d["elevation_step"] != "None":  # from conversions value could be "None"
         try:
             d["elevation_step"] = float(d["elevation_step"])
         except ValueError:

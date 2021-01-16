@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.6 exp"
+muxp_VERSION = "0.3.7 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1181,7 +1181,10 @@ class muxpGUI:
                     c["coordinates"] = []  # so just set to empty if not present
                 if c["type"].find("ercator") < 0 and c["type"].find("degrees") < 0 and c["type"].find("meters") < 0:
                     c["type"] += "&mercator"  # set Mercator projection as default if nothing else was defined
-                borderlandpoly = a.insertMeshFromObjFile(obj_filename, LogName, c["coordinates"], c["terrain"], c["type"])
+                if c["type"].find("same_cut") < 0 and c["type"].find("fill_gap") < 0 and c["type"].find("exact_match") \
+                        < 0 and c["type"].find("same_outline_inside_polygon") < 0:
+                    c["type"] += "&cut_obj_outline"  # set cut_obj_outline as default injection method
+                borderlandpoly = a.insertMeshFromObjFile(obj_filename, LogName, c)
                 if len(borderlandpoly) == 0:  # Error occurred when inserting
                     return -11
                 # elevation_scale = 0.05  # is now default value and configurable in MUXP File

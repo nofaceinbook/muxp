@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.3.0"
+muxpKMLexport2_VERSION = "0.3.7"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by bflat.py (Tool for flattening X-Plane Mesh)
@@ -315,6 +315,8 @@ def muxp2kml(filename, logname):
     kml.append("<description>\n")
     for d in muxpdefs:
         if d != "area" and d != "commands":
+            if d == "elevation_step" and not muxpdefs[d]:
+                continue  # no need to include elevation_step if value is not defined
             kml.append("{}: {}\n".format(d, muxpdefs[d]))
     kml.append("</description>\n\n")
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.6 exp
+# muxp_area.py    Version: 0.3.7 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -28,7 +28,6 @@ from muxp_math import *
 from copy import deepcopy
 from math import acos
 from obj_ex_import import *
-from muxp_KMLexport import kmlExport2  # TESTING ONLY
     
 class muxpArea:
     
@@ -143,6 +142,8 @@ class muxpArea:
             self.log.warning("{} DIFFERING ELEVATIONS at vertices found; updated to max. elevation found at each coordinates".format(different_elevations))
             #### tbd to set always on the same value in area, e.g. always highest found  ####
 
+        self.remove_flat_triangles()
+
         ##### to be continued ##############
         ###### OPEN: Check not atrias but really trias in dsf are correct? But then this has to be final step after creating dsfVertices and insertion in dsf ##########
 
@@ -162,6 +163,19 @@ class muxpArea:
                     vertices.append(v)  # add tuple of vertex at coords to make sure to get all vertices at the coords
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
         return vertices    #returns set of all vertices which ar on coords
+
+    def remove_flat_triangles(self):
+        """
+        Removes all area triangles that have no inside area i.e. two vertices are identical
+        """
+        removed_triangles = []
+        for t in self.atrias:
+            for v in range(3):
+                if (round(t[v][0], 7), round(t[v][1], 7)) == (round(t[(v+1)%3][0], 7), round(t[(v+1)%3][1], 7)):
+                    removed_triangles.append(t)
+        for t in removed_triangles:
+            self.log.info("Flat triangle {} is removed".format(t))
+            self.atrias.remove(t)
 
     def mesh_elevation(self, p, epsilon=0.0001):
         """
@@ -708,6 +722,8 @@ class muxpArea:
         normals = dict()  # dictionary for vertex normals
         v_raster_elev = dict()  # dictionary with True as value in case elevation at coordinates is from raster
 
+        self.remove_flat_triangles()  # skip triangles not adding area to the mesh
+
         select_from_cut = False
         if type_def.find("inside_polygon") < 0:  # using cut option is default
             polysouter, polysinner, borderv = self.CutPoly(poly)  # just cut shape in mesh
@@ -819,15 +835,20 @@ class muxpArea:
                                                  center_lines_offset + 1))  # 1 CENTER vn coordinate + start at 1
                     f.write("\n")
 
-    def insertMeshFromObjFile(self, filename, logname, poly, terrain, type_def):
+    def insertMeshFromObjFile(self, filename, logname, command_data):
         """
         Inserts mesh with only physical trias from an .obj filename and inserts it in area.
-        The outer polygon of file-mesh is connected to the poly using triangulation. All this
-        new trias will be set to type terrain.
+        The new mesh is from type terrain (included type of command_data) and terrain_Water.
+        There are different types to insert the mesh (defined in type in command_data).
+        In case of "fill gap" the outer polygon of file-mesh is connected to the poly (defined in command data
+        coordinates) using triangulation. All this new trias will be set to type terrain.
         Mesh must not have different vertex definitions for same x,y coordinates and ther must be no overlapping/
-        double faces.
-        To have room for the mesh, the mesh is first cut by poly and all inner trias are removed.
+        double faces. To have room for the mesh, the mesh is first cut by poly and all inner trias are removed.
         """
+        poly = command_data["coordinates"]
+        terrain = command_data["terrain"]
+        type_def = command_data["type"]
+
         self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
         obj_trias, obj_outline = read_obj_file(filename, logname, terrain, type_def, self)
 
@@ -874,14 +895,6 @@ class muxpArea:
             for t in trias_to_be_removed:
                 self.atrias.remove(t)  # tria is removed to be later replaced by trias from .obj
 
-        else:  # cut_obj_outline is default type, now we have outline and can remove it from current mesh via cut
-            # This is the default type as it should always work and does not need coordinates
-            borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
-            polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
-            match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
-
-        # kmlExport2(self.dsf, [obj_outline], self.atrias, filename + "_removed.kml")  ### TESTING ONLY
-
         # insert all trias from .obj file in trias of that MUXP area
         for t in obj_trias:
             self.atrias.append(t)
@@ -889,6 +902,8 @@ class muxpArea:
         if type_def.find("cut_obj_outline") >= 0:  # in case of cut we need to insert vertices of cut also in added obj_trias
             for vertex in borderv:
                 self.splitCloseEdges(vertex)
+            if type_def.find("smooth") >= 0:
+                self.smooth_cut(command_data, obj_outline)
 
         elif type_def.find("same_outline_inside_polygon") >= 0:  # removal of trias already done above
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
@@ -1395,13 +1410,13 @@ class muxpArea:
         Returns the polygon in which smoothing was performed
         """
 
-        if c["type"] == "smooth" or c["type"] == "double_cut":
+        if c["type"].find("smooth") >= 0 or c["type"].find("double_cut") >= 0:
             if "distance" in c:
                 d = c["distance"]
             else:
                 d = 20.0
             self.log.info("Smoothing type: {} with distance: {} for poly: {}".format(c["type"], d, poly))
-            if c["type"] == "double_cut":
+            if c["type"].find("double_cut") >= 0:
                 stretched_poly = stretch_poly(poly, d)
                 polysouter, polysinner, borderv = self.CutPoly(stretched_poly)
                 for box_edge in range(4):
