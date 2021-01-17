@@ -1,4 +1,4 @@
-# muxp_file.py    Version: 0.3.7 exp
+# muxp_file.py    Version: 0.3.71 exp
 #        
 # ---------------------------------------------------------
 # Python Class for handling muxp-files.
@@ -60,16 +60,16 @@ def readMuxpFile(filename, logname):
                         new_command_dict["command"] = key
                         d["commands"].append(new_command_dict)
                     else:
-                        log.info("Read key: {} assigned to: {} and indent: {}".format(key, value, line_indent))  
-                        d[key] = value
+                        log.info("Read key: {} assigned to: {} and indent: {}".format(key, value.strip(), line_indent))
+                        d[key] = value.strip()
                 else: #we are inside a command
                     if len(value) == 0: #if no value given, this is a data list for last element of command
                         log.info("Entering new datalist: {}".format(key))
                         new_datalist = []
                         d["commands"][-1][key] = new_datalist
                     else:
-                        log.info("Read key inside command: {} assigned to: {} and indent: {}".format(key, value, line_indent))  
-                        d["commands"][-1][key] = value
+                        log.info("Read key inside command: {} assigned to: {} and indent: {}".format(key, value.strip(), line_indent))
+                        d["commands"][-1][key] = value.strip()
             if line.find('-') == 0: #we have now data list element which should belong to data set in command ---> error checks should be done as weel
                 #list_elements = line[2:].split()
                 #if len(list_elements) == 1:
@@ -148,11 +148,11 @@ def validate_muxp(d, logname):
             err = "area argument {} is not a float.".format(i+1)
             log.error(err)
             return -4, err
-        if i < 2 and not longitude <  d["area"][i] < longitude + 1:
+        if i < 2 and not longitude <=  d["area"][i] <= longitude + 1:
             err = "area argument {} is outside defined tile definition for longitude".format(i+1)
             log.error(err)
             return -4, err
-        if i >= 2 and not latitude <  d["area"][i] < latitude + 1:
+        if i >= 2 and not latitude <=  d["area"][i] <= latitude + 1:
             err = "area argument {} is outside defined tile definition for latitude".format(i+1)
             log.error(err)
             return -4, err        

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_area.py    Version: 0.3.7 exp
+# muxp_area.py    Version: 0.3.71 exp
 #        
 # ---------------------------------------------------------
 # Python Class for adapting mesh in a given area of an XPLNEDSF
@@ -649,6 +649,67 @@ class muxpArea:
                      edges[(p[i][0], p[i][1], p[(i+1)%3][0], p[(i+1)%3][1])]=[[tx, i]]
         return edges
 
+    def keep_poly_in_tile(self, poly_given):  # adapts poly that all coordinates remain in tile (cuts at boarders of tile)
+        self.log.info("Checking if polygon {} stays completely in current tile.".format(poly_given))
+        poly = deepcopy(poly_given)  # don't change given polygon in case needed elsewhere
+        poly_closed = True
+        if poly[0][0] != poly[-1][0] or poly[0][1] != poly[-1][1]:
+            poly_closed = False
+            # poly.append(poly[0])  # for calculation below make sure that polygon is closed; seems not to be needed
+        i = 0  # first point of list is now definitely inside tile
+        while i < len(poly):  # assuming closed polygon with first equals last point in list
+            if poly[i][0] > int(self.dsf.Properties["sim/east"]):
+                if i > 0:  # we have been inside tile before, so there is a cut
+                    self.log.warning("Poly exits at point {} current tile to the east, will be cut!".format(i))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [int(self.dsf.Properties["sim/east"]), -91], [int(self.dsf.Properties["sim/east"]), 91]))
+                    i += 1
+                while i < len(poly) and poly[i][0] > int(self.dsf.Properties["sim/east"]):
+                    last_point = [poly[i][0], poly[i][1]]
+                    del poly[i]
+                if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
+                    poly.insert(i, intersection(last_point, poly[i], [int(self.dsf.Properties["sim/east"]), -91], [int(self.dsf.Properties["sim/east"]), 91]))
+                i += 1
+            elif poly[i][0] < int(self.dsf.Properties["sim/west"]):
+                if i > 0:  # we have been inside tile before, so there is a cut
+                    self.log.warning("Poly exits at point {} current tile to the west, will be cut!".format(i))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [int(self.dsf.Properties["sim/west"]), -91], [int(self.dsf.Properties["sim/west"]), 91]))
+                    i += 1
+                while i < len(poly) and poly[i][0] < int(self.dsf.Properties["sim/west"]):
+                    last_point = [poly[i][0], poly[i][1]]
+                    del poly[i]
+                if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
+                    poly.insert(i, intersection(last_point, poly[i], [int(self.dsf.Properties["sim/west"]), -91], [int(self.dsf.Properties["sim/west"]), 91]))
+                i += 1
+            elif poly[i][1] > int(self.dsf.Properties["sim/north"]):
+                if i > 0:  # we have been inside tile before, so there is a cut
+                    self.log.warning("Poly exits at point {} current tile to the north, will be cut!".format(i))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(self.dsf.Properties["sim/north"])], [181, int(self.dsf.Properties["sim/north"])]))
+                    i += 1
+                while i < len(poly) and poly[i][1] > int(self.dsf.Properties["sim/north"]):
+                    last_point = [poly[i][0], poly[i][1]]
+                    del poly[i]
+                if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
+                    poly.insert(i, intersection(last_point, poly[i], [-181, int(self.dsf.Properties["sim/north"])], [181, int(self.dsf.Properties["sim/north"])]))
+                i += 1
+            elif poly[i][1] < int(self.dsf.Properties["sim/south"]):
+                if i > 0:  # we have been inside tile before, so there is a cut
+                    self.log.warning("Poly exits at point {} current tile to the south, will be cut!".format(i))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(self.dsf.Properties["sim/south"])], [181, int(self.dsf.Properties["sim/south"])]))
+                    i += 1
+                while i < len(poly) and poly[i][1] < int(self.dsf.Properties["sim/south"]):
+                    last_point = [poly[i][0], poly[i][1]]
+                    del poly[i]
+                if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
+                    poly.insert(i, intersection(last_point, poly[i], [-181, int(self.dsf.Properties["sim/south"])], [181, int(self.dsf.Properties["sim/south"])]))
+                i += 1
+            else:
+                i += 1
+        if poly_closed and (poly[0][0] != poly[-1][0] or poly[0][1] != poly[-1][1]):  # for special case that poly was adapted above without closing it
+            poly.insert(0, poly[-1])  # close poly by inserting last point as first, as this brings better triangulation for runways
+        #if not poly_closed:
+        #    del poly[-1]
+        self.log.info("   Polygon after check: {}".format(poly))
+        return poly
     
     def limitEdges(self, poly, limit):
         ############### PROBLEM: If tria on one side of the edge uses raster and the one of the other side is using pre-defined elevation
@@ -1325,7 +1386,7 @@ class muxpArea:
          inner edge considered to get just elevation.
          """
         del poly[-1]  # first = last point not needed for following calculations
-        stretched_poly = stretch_poly(poly, dist)
+        stretched_poly = self.keep_poly_in_tile(stretch_poly(poly, dist))
         # stretched poly returns vertices ordered clockwise, important below for orthogonal vector to inside
 
         if dist == 0:

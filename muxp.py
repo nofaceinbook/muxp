@@ -3,7 +3,7 @@
 #
 # muxp.py
 #        
-muxp_VERSION = "0.3.7 exp"
+muxp_VERSION = "0.3.71 exp"
 # ---------------------------------------------------------
 # Python Tool: Mesh Updater X-Plane (muxp)
 #
@@ -1310,6 +1310,7 @@ class muxpGUI:
                 borderv, log_info = sortPointsAlongPoly(borderv, c["coordinates"])  # NEW 16.08.20
                 log.info("Logs from sorting Points along Poly: {}\n".format(log_info))
                 borderv.append(borderv[0])  # make it a closed poly
+                borderv = a.keep_poly_in_tile(borderv)  # don't create new terrain below outside tile
                 for v in borderv:
                     log.info("Border Vertex after Cut: {}".format(v))
                 if c["terrain"] != "None":
@@ -1338,6 +1339,7 @@ class muxpGUI:
                 log.info("Box around runway is: {}".format(segment_bound))
                 segment_interval_bound = cut_box_in_segments(segment_bound, c["profile_interval"])
                 polysouter, polysinner, borderv = a.CutPoly(segment_interval_bound, None, False) #False for not keeping inner trias; None for elevation as only new terrain should get elevation
+                segment_interval_bound = a.keep_poly_in_tile(segment_interval_bound)
                 a.createPolyTerrain(segment_interval_bound, c["terrain"], -32768.0, "segment_intervals") #for first step take default elevation -32768 for raster, will be changed below, create trias as "segment_intervals"
 
                 for vertex in borderv:  # insert in mesh for poly also vertices from surrounding mesh on the border
