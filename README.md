@@ -40,6 +40,7 @@ start/re-start of X-Plane it becomes visible. You can also change this config an
 ## Manual / Own Mesh Updates
 Much more details on MUXP are included in the [manual](https://github.com/nofaceinbook/muxp/releases/latest/download/MUXP-Manual.pdf).
 Especially creation of your own mesh updates requires some learning but the manual includes examples to get you started.
+There is also a [video](https://youtu.be/XXBA7OrakMo) by Pierre (thanks!) explaining the basics of MUXP in detail.
 
 
 ## WARNING - Alpha Status - Still under Development
