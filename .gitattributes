@@ -1,0 +1,10 @@
+# MUXP .gitattributes file
+
+#
+# Exclude files from exporting
+#
+
+.gitattributes  export-ignore
+.gitignore      export-ignore
+MUXP-Sample-Files   export-ignore
+doc                 export-ignore
