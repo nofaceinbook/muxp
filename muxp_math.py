@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.3.6 exp
+# muxp_math.py   Version: 0.4.0 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
 #
-# For more details refert to GitHub: https://github.com/nofaceinbook/betterflat
+# For more details refer to GitHub: https://github.com/nofaceinbook/muxp
 #
 # WARNING: This code is still under development and may still have some errors.
 #
-# Copyright (C) 2020 by schmax (Max Schmidt)
+# Copyright (C) 2021 by schmax (Max Schmidt)
 #
 # This code is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR 

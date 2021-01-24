@@ -3,7 +3,7 @@
 # with allowance by it's author Nicola Marangon
 #
 # It allows conversion from MUXP to WED and back
-# This version is compatible with MUXP File version 0.34
+# This version is compatible with MUXP File version 0.4
 #################################################################################################
 
 import yaml

@@ -1,4 +1,4 @@
-SUPPORTED_MUXP_FILE_VERSION = 0.36
+SUPPORTED_MUXP_FILE_VERSION = 0.4
 
 MUST_BASE_VALUES = ["muxp_version", "id", "version", "area", "tile", "commands"]  # These values must be all present in muxp files
 

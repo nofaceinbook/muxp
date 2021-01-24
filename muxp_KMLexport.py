@@ -3,14 +3,14 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.3.71"
+muxpKMLexport2_VERSION = "0.4.0"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
-# This module is called by bflat.py (Tool for flattening X-Plane Mesh)
+# This module is called by muxp.py (Tool for flattening X-Plane Mesh)
 #
-# For more details refert to GitHub: https://github.com/nofaceinbook/betterflat
+# For more details refer to GitHub: https://github.com/nofaceinbook/muxp
 
-# Copyright (C) 2020 by schmax (Max Schmidt)
+# Copyright (C) 2021 by schmax (Max Schmidt)
 #
 # This code is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR 
