@@ -1,4 +1,6 @@
 # Mesh Updater X-Plane (MUXP)
+![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MUXP_LOGO.JPG)
+
 This program allows to update the mesh files (.dsf-files) for X-Plane 11.
 ![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MuxpBeforeAfterYYR.JPG)
 
