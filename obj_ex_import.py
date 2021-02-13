@@ -222,6 +222,7 @@ def match_border_with_existing_vertices(border, trias, area_trias, decimals=5):
     elevation of existing vertices in area_trias will be selected. The vertices in border and area_trias
     are adapted accordingly.
     Matching is done value of decimals after decimal points of coordinates. Default value 5 is about 1m matching.
+    Info: when swapping trias and area_trias the elevation from inserted trias are selected.
     """
     border_dict = {}  # set up dictionary with all coords of border to find additional on those coords
     vertices = {}  # dict of existing vertices from dsf which are source for correct coordinates and elevation
@@ -236,5 +237,5 @@ def match_border_with_existing_vertices(border, trias, area_trias, decimals=5):
         for v in t[:3]:
             if (round(v[0], decimals), round(v[1], decimals)) in vertices:
                 dsf_v = vertices[(round(v[0], decimals), round(v[1], decimals))]
-                for i in range(5):  # take coordinates from dsf vertex incl. vertex normal
+                for i in range(3):  # NEW: Don't adapt vertex normals; they stay as they are and could be adapted later with own command
                     v[i] = dsf_v[i]

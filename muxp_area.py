@@ -164,6 +164,36 @@ class muxpArea:
         self.log.info("{} vertices on {} coords found.".format(len(vertices), len(coords)))
         return vertices    #returns set of all vertices which ar on coords
 
+    def setUniqueElevationAtCoords(self, coords, trias=[]):
+        """
+        Sets at list of coordinates (list of [x, y, z]) for all vertices at [x, y] coordinates the elevation to z
+        In case trias are given, then the elevation for z is not taken from coords but from the mesh triangles
+        """
+        self.log.info("Setting unique elevation for coords: {}".format(coords))
+        cdict = {}  # set up dictionary with all coords o to find additional in area with same coords
+        vertices = 0  # number of vertices set to unique elevation
+        if len(trias):  # in that case we have to retrieve elevation from that trieas
+            for c in coords:
+                cdict[(round(c[0], 7), round(c[1], 7))] = True  # These are the coordinates which we are looking for
+            for t in trias:
+                for v in t[:3]:
+                    if (round(v[0], 7), round(v[1], 7)) in cdict:
+                        cdict[(round(v[0], 7), round(v[1], 7))] = v[2]
+                        # IMPORTANT: This assumes that elevation at trias vertices is already unique
+        else:  # in that case we can grab the elevation as third value from coordinates
+            for c in coords:
+                cdict[(round(c[0], 7), round(c[1], 7))] = c[2]  # This is the elevation that shall all vertices at rounded (cm) coords receive
+        self.log.info("Unique elevation has been retrieved for trias and is is set to: {}".format(cdict))
+        for t in self.atrias:
+            for v in t[:3]:
+                self.log.debug("Checking vertex: ({}, {})".format(round(v[0], 7), round(v[1], 7)))
+                if (round(v[0], 7), round(v[1], 7)) in cdict:
+                    old_elev = v[2]
+                    v[2] = cdict[(round(v[0], 7), round(v[1], 7))]
+                    self.log.info("  Setting at: {} unique elevation from: {} to: {}".format(v[:2], old_elev, v[2]))
+                    vertices += 1
+        self.log.info("{} vertices on {} coords set to unique elevation".format(vertices, len(coords)))
+
     def remove_flat_triangles(self):
         """
         Removes all area triangles that have no inside area i.e. two vertices are identical
@@ -173,6 +203,7 @@ class muxpArea:
             for v in range(3):
                 if (round(t[v][0], 7), round(t[v][1], 7)) == (round(t[(v+1)%3][0], 7), round(t[(v+1)%3][1], 7)):
                     removed_triangles.append(t)
+                    break  # NEW 8.2.2021: to avoid to add t several times in case tria is one point
         for t in removed_triangles:
             self.log.info("Flat triangle {} is removed".format(t))
             self.atrias.remove(t)
@@ -944,7 +975,9 @@ class muxpArea:
         elif type_def.find("cut_obj_outline") >= 0:  # now we have outline we can remove from current mesh via cut
             borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
             polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping trias
-            match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
+            for vertex in borderv:  # NEW: Add the vertices created by cut also in new trias to be inserted
+                self.splitCloseEdges(vertex, obj_trias)
+
 
         elif type_def.find("exact_match") >= 0:  # in case of exact match we remove all trias inside obj_outline
             match_border_with_existing_vertices(obj_outline, obj_trias, self.atrias)
@@ -961,10 +994,16 @@ class muxpArea:
             self.atrias.append(t)
 
         if type_def.find("cut_obj_outline") >= 0:  # in case of cut we need to insert vertices of cut also in added obj_trias
-            for vertex in borderv:
-                self.splitCloseEdges(vertex)
+            #for vertex in borderv:
+            #    self.splitCloseEdges(vertex)
+            # all_obj_border_vertices = borderv + obj_outline
+            #self.setUniqueElevationAtCoords(borderv + obj_outline, obj_trias) ### TBD: updating just new obj_outline (to be calculated again) would be suficient. #####
+
             if type_def.find("smooth") >= 0:
+                match_border_with_existing_vertices(borderv, self.atrias, obj_trias)  # IMPORTANT: SWAPPED trias, here atrias will receive coords/elevaton from obj_trias
                 self.smooth_cut(command_data, obj_outline)
+            else:  # no smoothing defined
+                match_border_with_existing_vertices(borderv, obj_trias, self.atrias)  # the loaded mesh will take elevation from existing mesh at the border
 
         elif type_def.find("same_outline_inside_polygon") >= 0:  # removal of trias already done above
             borderland = obj_outline  # exact match, no borderland; just border of the outer edges of inserted mesh
@@ -1313,17 +1352,20 @@ class muxpArea:
                 ############# TBD: Elevation change probably not required here, because it will always be set via border vertices later ?!? #########################
             self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patchID])  #As tria is completely new, there is no pool/patchID where tria is inside, so None ==> If None makes problems use [None, None] or [-1, -1]
             
-    def splitCloseEdges(self, v, mindist=0.1):
+    def splitCloseEdges(self, v, trias=None, mindist=0.1):
         """
         Checks for a vertex v if it lies on/next to edges of trias.
         If this is the case according edges (trias) are split at v.
         Minimal distance is in meter. When v is closer than mindist
         to edge vertex or further away from edge, the edge is not split.
+        NEW: Option to submit own trias array to be adapted, if empty (default) self.atrias will be adapted
         """
         self.log.info("Checking if close edge for vertex {} is found.".format(v))
         new_trias = []
         old_trias = []
-        for enum_t, t in enumerate(self.atrias):
+        if not trias:
+            trias = self.atrias
+        for enum_t, t in enumerate(trias):
             for e in range(3):
                 e_part, o_part, dist = edgeDistance(v, t[e][:2], t[(e+1)%3][:2])
                 if e_part > 0 and e_part < 1: #v must be between two vertices of edge
@@ -1336,13 +1378,13 @@ class muxpArea:
                             old_trias.append(t)
         for nt in new_trias:
             self.log.info("   Tria appended: {}".format(nt))
-            self.atrias.append(nt) #update area trias by appending new trias
+            trias.append(nt) #update area trias by appending new trias
         for ot in old_trias:
             self.log.info("   Tria removed: {}".format(ot))
             if ot[0][2] > 0 or ot[1][2] > 0 or ot[2][2] > 0: ########## ERROR CHECKING ---> TO BE REMOVED ###############
                 self.log.error("          REMOVED TRIA ABOVE ALREADY HAVING ELEVATION")
-            if ot in self.atrias: ###### NEW 05.04.2020 ############## WHY REQUIRED after setting relative_mindist from 0.001 to 0.00001??? NOW STILL REQUIRE ??? ############
-                self.atrias.remove(ot) #update area trias by by removing trias that are replaced by new ones
+            if ot in trias: ###### NEW 05.04.2020 ############## WHY REQUIRED after setting relative_mindist from 0.001 to 0.00001??? NOW STILL REQUIRE ??? ############
+                trias.remove(ot) #update area trias by by removing trias that are replaced by new ones
         return
 
     def assign_spline_elevation(self, spline_points, vertices, place_holder_removal=0):
@@ -1387,6 +1429,7 @@ class muxpArea:
          """
         del poly[-1]  # first = last point not needed for following calculations
         stretched_poly = self.keep_poly_in_tile(stretch_poly(poly, dist))
+        self.log.info("Smoothing to border of stretched poly: {}".format(stretched_poly))
         # stretched poly returns vertices ordered clockwise, important below for orthogonal vector to inside
 
         if dist == 0:
@@ -1400,10 +1443,11 @@ class muxpArea:
                     base_i, inside_i = PointLocationInTria(v, [stretched_poly[i_next], poly[i], stretched_poly[i]])
                     if 0 < base_i < 1 and 0 + error_rate < inside_i < 1:
                         base_in, inside_in = PointLocationInTria(v, [stretched_poly[i], poly[i_next], stretched_poly[i_next]])
-                        if 0 <= base_in <= 1 and 0 + error_rate < inside_in < 1 - error_rate:
+                        if 0 <= base_in <= 1 and 0 + error_rate < inside_in < 1 - error_rate and inside_i < 1 - error_rate:  #### NEW: use this if only if not too close to edge of poly also for insiide_i
                             base_dist = (base_i + 1 - base_in) / 2
                             base_v = [stretched_poly[i][0] + base_dist*(stretched_poly[i_next][0] - stretched_poly[i][0]), stretched_poly[i][1] + base_dist*(stretched_poly[i_next][1] - stretched_poly[i][1])]
                             inner_v = [poly[i][0] + base_dist*(poly[i_next][0] - poly[i][0]), poly[i][1] + base_dist*(poly[i_next][1] - poly[i][1])]
+                            self.log.info("Calculating elevation for vertex: {} with base: {} and inner: {}".format(v[:2], base_v, inner_v))
                             if probe_inner_vertex:
                                 #ortho_to_inside = [poly[i_next][1] - poly[i][1], -(poly[i_next][0] - poly[i][0])]
                                 #f = 1 / distance(inner_v, [inner_v[0] + ortho_to_inside[0], inner_v[1] + ortho_to_inside[1]])
@@ -1411,17 +1455,29 @@ class muxpArea:
                                 #elev_inner_v = self.mesh_elevation([inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]])
                                 #self.log.info("Inner Point: {}  Elevation from: {}".format(inner_v, [inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]]))
                                 elev_inner_v = self.mesh_elevation(inner_v)
+                                if elev_inner_v is None:  # Before getting error, just use elevation
+                                    self.log.error("No elevation found at inner_v {} so elevation not changed!!".format(inner_v))
+                                    continue
                             else:
                                 elev_inner_v = elevation
                             elev_base_v = self.mesh_elevation(base_v)
+                            if elev_base_v is None:  # Before getting error, just use elevation
+                                self.log.error(
+                                    "No elevation found at base_v {} so elevation not changed!!".format(base_v))
+                                continue
                             base_inner_ratio = min(distance(base_v, v) / distance(base_v, inner_v), 1)  # maximum ratio shall be 1
                             self.log.info("Elevation at base {} for {} in distance_ratio {} is: {} (elevation inside at {}  : {})".format(base_v, v[:2], base_inner_ratio, elev_base_v, inner_v, elev_inner_v))
                             v[2] = elev_base_v + base_inner_ratio * (elev_inner_v - elev_base_v)
                             self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
-                        elif 1 - error_rate <= inside_i < 1 and 1 - error_rate <= inside_in < 1:
+                        elif 0 <= base_in <= 1 and 1 - error_rate <= inside_i < 1 and 1 - error_rate <= inside_in < 1:
                             # we are close to edge of poly so we just take elevation at poly
                             if probe_inner_vertex:
-                                inner_dist, outside = PointLocationInTria(v, [poly[i_next], stretched_poly[i], poly[i]])
+                                base_dist = (base_i + 1 - base_in) / 2   #### NEW ####
+                                inner_dist = base_dist  # just use distance proportion of base also for vertex on/near inner polygon
+                                if inner_dist < 0 or inner_dist > 1:
+                                    inner_dist = 0  # fall back in case calculation goes wrong e.g. because of rounding
+                                # inner_dist, outside = PointLocationInTria(v, [poly[i_next], stretched_poly[i], poly[i]])
+                                #self.log.info("Setting elevation of inner poly with base_dist: {} and poly_dist: {} (in meters {})".format(base_dist, inner_dist, distance(poly[i], poly[i_next])))  ### TESTING ONLY ####
                                 inner_v = [poly[i][0] + inner_dist * (poly[i_next][0] - poly[i][0]),
                                            poly[i][1] + inner_dist * (poly[i_next][1] - poly[i][1])]
                                 #ortho_to_inside = [poly[i_next][1] - poly[i][1], -(poly[i_next][0] - poly[i][0])]
@@ -1429,7 +1485,12 @@ class muxpArea:
                                 ### go 1m to the inside of poly to get really elevation of inside the poly and not outside
                                 #v[2] = self.mesh_elevation([inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]])
                                 #self.log.info("Point {} very close to poly! Inner Point: {}  Elevation from: {} is: {}".format(v[:2], inner_v, [inner_v[0] + f*ortho_to_inside[0], inner_v[1] + f*ortho_to_inside[1]], v[2]))
-                                v[2] = self.mesh_elevation(inner_v)
+                                new_elevation_v = self.mesh_elevation(inner_v)
+                                if new_elevation_v is None:  # Before getting error, just use elevation
+                                    self.log.error("No elevation found for v: {} at inner_v: {} with inner_dist: {} --> so elevation not changed!!".format(v[:2], inner_v, inner_dist))
+                                    continue
+                                else:
+                                    v[2] = new_elevation_v
                             else:
                                 v[2] = elevation
 
