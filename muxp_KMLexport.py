@@ -3,7 +3,7 @@
 #
 # muxp_KMLexport.py   for muxp
 #        
-muxpKMLexport2_VERSION = "0.4.0"
+muxpKMLexport2_VERSION = "0.4.1"
 # ---------------------------------------------------------
 # Python module for exporting mesh area to be flattened to KML-file.
 # This module is called by muxp.py (Tool for flattening X-Plane Mesh)
@@ -45,14 +45,15 @@ def kmlExport2(dsf, boundaries, extract, filename):
         all_vertices.extend(bounds)
     latS, latN, lonW, lonE = BoundingRectangle(all_vertices)
     # Make sure that bounds stay inside 1x1 grid
-    if int(lonE) > int(dsf.Properties["sim/east"]):
-        lonE = int(dsf.Properties["sim/east"]) - 0.0000001
-    if int(lonW) < int(dsf.Properties["sim/west"]):
-        lonW = int(dsf.Properties["sim/west"]) + 0.0000001
-    if int(latN) > int(dsf.Properties["sim/north"]):
-        latN = int(dsf.Properties["sim/north"]) - 0.0000001
-    if int(latS) < int(dsf.Properties["sim/south"]):
-        latS = int(dsf.Properties["sim/south"]) + 0.0000001
+    # NEW 05.06.21: if conditions of lon/lat not rounded to int + assign full end coords no +/- 0.0000001
+    if lonE > int(dsf.Properties["sim/east"]):
+        lonE = int(dsf.Properties["sim/east"])  # - 0.0000001
+    if lonW < int(dsf.Properties["sim/west"]):
+        lonW = int(dsf.Properties["sim/west"])  # + 0.0000001
+    if latN > int(dsf.Properties["sim/north"]):
+        latN = int(dsf.Properties["sim/north"])  # - 0.0000001
+    if latS < int(dsf.Properties["sim/south"]):
+        latS = int(dsf.Properties["sim/south"])  # + 0.0000001
 
     #### Get index for raster pixel SW (yS, xW) for area to be exported
     if len(dsf.Raster):  # check if dsf file has Raster definition, and skip this part if not

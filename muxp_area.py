@@ -944,6 +944,12 @@ class muxpArea:
         self.log.info("Inserting now mesh from: {} into: poly: {} using terrain: {}".format(filename, poly, terrain))
         obj_trias, obj_outline = read_obj_file(filename, logname, terrain, type_def, self)
 
+        if type_def.find("elevation_mesh_only") >= 0:  # adapt current mesh incl. terrain on new elevation
+            self.integrate_elevation_mesh(obj_trias, obj_outline)
+            if type_def.find("smooth") >= 0:
+                self.smooth_cut(command_data, obj_outline)
+            return obj_outline
+
         if type_def.find("same_outline_inside_polygon") >= 0:  # the shape of inserting mesh must have same edges as existing mesh in dsf
             # this type will remove same trias as when mesh was extracted, if insterted mesh still has same outline it worsk
             # actually this type is not needed any more as exact_match can be used and no coordinates are needed
@@ -1584,3 +1590,63 @@ class muxpArea:
             if coords[i][2] == magic_number:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
                 coords[i][2] = self.mesh_elevation([coords[i][1], coords[i][0]])  #### IMPORTANT: 3d coordinates currently not swapped !!!
                 self.log.info("Assigned magic elevation -99999 at {} to: {}".format(coords[i][:2], coords[i][2]))
+
+    def integrate_elevation_mesh(self, obj_trias, obj_outline):
+        self.log.info("Integrate elevation mesh inside polygon: {}".format(obj_outline))
+        new_trias = []  # list of new atrias with correct mesh elevations
+        ol_min_y, ol_max_y, ol_min_x, ol_max_x = BoundingRectangle(obj_outline, 0)
+        for t in self.atrias:
+            self.log.debug("Checking Tria: {}".format(t))
+            t_x_min = min(t[0][0], t[1][0], t[2][0])
+            t_x_max = max(t[0][0], t[1][0], t[2][0])
+            t_y_min = min(t[0][1], t[1][1], t[2][1])
+            t_y_max = max(t[0][1], t[1][1], t[2][1])
+            if t_x_max < ol_min_x or t_x_min > ol_max_x or t_y_max < ol_min_y or t_y_min > ol_max_y:
+                continue  # if t is left, right, below or above bounding rectangle of obj_outline, then ignore t
+            #vs_in_poly = 0
+            #for v in t[:3]:
+            #    if PointInPoly(v, obj_outline):  #### TBD: Check if t intersects outline; v inside not enough!!!!
+            #        vs_in_poly += 1
+            #if vs_in_poly:  # this tria is inside the polygon where elevation mesh has to be used
+            for obj_t in obj_trias:
+                if max(obj_t[0][0], obj_t[1][0], obj_t[2][0]) < t_x_min or min(obj_t[0][0], obj_t[1][0], obj_t[2][0]) > t_x_max:
+                    continue  # no need to check for intersection if obj_t is left or right of t
+                if max(obj_t[0][1], obj_t[1][1], obj_t[2][1]) < t_y_min or min(obj_t[0][1], obj_t[1][1], obj_t[2][1]) > t_y_max:
+                    continue  # no need to check for intersection if obj_t is below or above t
+                obj_v_index_outside_t = None
+                for i, obj_v in enumerate(obj_t[:3]):
+                    if not isPointInTria(obj_v, t[:3]):
+                        obj_v_index_outside_t = i
+                        break
+                if obj_v_index_outside_t is None:  # obj tria is fully inside atria, so it will be part of new mesh
+                    inner = [[[obj_t[0][0], obj_t[0][1]], [obj_t[1][0], obj_t[1][1]], [obj_t[2][0], obj_t[2][1]]]]
+                    # so the inner intersection is just obj_t as list to be inserted below
+                else:  # we need to check for cuts with poly = obj_t with first vertex outside of t
+                    # now creating cutting poly, this must be closed, so first and last vertex are identical
+                    if obj_v_index_outside_t == 0:
+                        poly = [[obj_t[0][0], obj_t[0][1]], [obj_t[1][0], obj_t[1][1]], [obj_t[2][0], obj_t[2][1]], [obj_t[0][0], obj_t[0][1]]]
+                    elif obj_v_index_outside_t == 1:
+                        poly = [[obj_t[1][0], obj_t[1][1]], [obj_t[2][0], obj_t[2][1]], [obj_t[0][0], obj_t[0][1]], [obj_t[1][0], obj_t[1][1]]]
+                    elif obj_v_index_outside_t == 2:
+                        poly = [[obj_t[2][0], obj_t[2][1]], [obj_t[0][0], obj_t[0][1]], [obj_t[1][0], obj_t[1][1]], [obj_t[2][0], obj_t[2][1]]]
+                    outer, inner, border = self.PolyCutPoly(t[:3], poly)
+                    self.log.debug("Intersection of Polys is: {}".format(inner))
+                if len(inner):  # all inner parts of cut will be part of new mesh
+                    for inner_poly in inner:
+                        for tria in earclipTrias(deepcopy(inner_poly)):
+                            new_v = [None, None, None]
+                            for e in range(3):
+                                new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
+                                mesh_data = createFullCoords(tria[e][0], tria[e][1], obj_t)
+                                new_v[e][2] = mesh_data[2]  # take elevation from obj_t
+                                new_v[e][3] = mesh_data[3]  # first part of normal vector of obj_t vertex
+                                new_v[e][4] = mesh_data[4]  # second part of normal vector of obj_t vertex
+                            new_trias.append([new_v[0], new_v[1], new_v[2], deepcopy(t[3]), deepcopy(t[4]), deepcopy(t[5]), deepcopy(t[6])])
+                            # TBD: assign direct values instead of deepcopy()
+                            #### TBD: The created patch_ids when reading obj_file will not be used --> causes empty patches in dsf --> to be removed
+                            ########### ---> Check when reading .obj and creating patches if only elevation mesh is inserted and if assign None for patchId, will here be overwritten with a correct patchID
+        polysouter, polysinner, borderv = self.CutPoly(obj_outline, None, False)  # False for not keeping inner trias; None for elevation no elevation change
+        for new_t in new_trias:
+            self.atrias.append(new_t)
+        ### TBD: Re-allgin all vertices and get rid of silver/point/edge only) trias  --> Use validate_mesh() with rounding to 6 decimals, but happesn anyway if last command....
+

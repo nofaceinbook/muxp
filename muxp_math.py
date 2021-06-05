@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #******************************************************************************
 #
-# muxp_math.py   Version: 0.4.0 exp
+# muxp_math.py   Version: 0.4.1 exp
 #        
 # ---------------------------------------------------------
 # Mathematical functions for Python Tool: Mesh Updater X-Plane (muxp)
@@ -826,3 +826,48 @@ def stretch_poly(poly, width):
 
 def tria_center(p, q, r):  # returning center coordinates of a triangle with points p, q, r
     return [(p[0] + q[0] + r[0])/3, (p[1] + q[1] + r[1])/3]
+
+
+def tria_intersection(s, t, v_in_t=None, v_out_t=None):
+    # calculates intersection of trias s and t that are ordered clockwise
+    # v_in_t is index of vertex of s that lies inside t
+    # v_out_t is index of vertex of s outside t from which the edge cuts edge of s
+    ##### TBD: Handle case of parallel edges, vertices close to edges or close/identical vertices ####
+    if v_in_t is not None:
+        p_intersect = [s[v_in_t]]  # polygon that describes intersection and will be returned
+        for i in range(v_in_t, 3):
+            for j in range(3):  # check whether edge i of s cuts one of edges j of t
+                x = intersection(s[i], s[(i+1)%3], t[j], t[(j+1)%3])
+                if x:
+                    p_intersect.append(x)
+                    print("Current intersection when leaving t: {}".format(p_intersect))
+                    inside_t = False  # at point x we left now tria t
+                    for i2 in range(i+1, 3):  # now we have to check which edge of s leads back to t
+                        for j2 in range(3):  # check which edge of t is cut when coming back
+                            y = intersection(s[i2], s[(i2 + 1) % 3], t[j2], t[(j2 + 1) % 3])
+                            if y:
+                                way_from_x2y = j  # vertices of t lying between edge cut with x and edge cut with y
+                                while way_from_x2y != j2:
+                                    way_from_x2y += 1
+                                    p_intersect.append(t[way_from_x2y])
+                                p_intersect.append(y)
+                                print("Current intersection when coming back to t: {}".format(p_intersect))
+                                inside_t = True
+                                break
+                        if inside_t:
+                            break
+                    if not inside_t:
+                        print("Error: Trias s and t have just on cutting point!")
+                        return []
+                    break
+                    i = i2  # we checked already next edges of s ===> TBD: only use i and not i2 in addition ######
+                    ##### TBD: USE WHILE INSTEAD OF FOR ??? ####
+                if j == 2:  # we did not find an intersection of edge i with t
+                    p_intersect.append(s[(i+1)%3])  # so vertex i+1 of s lies also inside t
+        return p_intersect
+    if v_out_t is not None:
+        p_intersect = []  ##### TO BE DONE ###
+        return p_intersect
+    #### if nothing is known of s and t check for point inside or cutting point and call funciton again ###
+    ####### TBD: ALSO RETURN EVENT LIST FOR NEIGHBOURS OF t TO CONTINUE #####
+

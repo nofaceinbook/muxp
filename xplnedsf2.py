@@ -700,8 +700,11 @@ class XPLNEDSF:
                     self.Networks.append([[subroadtype, junctionoffset, poolIndex]]) #sp new entry with new base-settings
                 self.Networks[-1].extend([c]) #append complete command to build this network part on current base settings
             elif 12 <= c[0] <= 15: #Polygon Commands
-                self.Polygons[defIndex].append([poolIndex]) #new Polygond added for defIndex type and it starts with poolIndex from which its vertices are
-                self.Polygons[defIndex][-1].extend(c) #followed by the complete command to build it
+                if len(self.Polygons) > defIndex:  # NEW 13.05.21 seems to exist dsf file with polygons that have not been defined
+                    self.Polygons[defIndex].append([poolIndex]) #new Polygond added for defIndex type and it starts with poolIndex from which its vertices are
+                    self.Polygons[defIndex][-1].extend(c) #followed by the complete command to build it
+                else:
+                    self._log_.warning("dsf file includes polygon with defindex {} that was not defined. Polygon is ignored.".format(defIndex))
             elif 16 <= c[0] <= 18:  # Add new Terrain Patch
                 patchPoolIndex = None #poolIndex for new patch needs to be set as first command
                 if c[0] == 17: # New Patch with new physical flag
@@ -808,7 +811,7 @@ class XPLNEDSF:
             if defIndex != d.defIndex:
                 enccmds.extend(encCMD([3, d.defIndex])) #definition set according to current definition id; function will handle if id > 255
                 defIndex = d.defIndex
-            if poolIndex != d.cmds[0][1]: #Pool-Index is defined by first command and required to be defined directly before new Patch is defined!    
+            if len(d.cmds) and poolIndex != d.cmds[0][1]: #Pool-Index is defined by first command and required to be defined directly before new Patch is defined!
                 enccmds.extend(encCMD([1, d.cmds[0][1]])) #include command for changing poolIndex
                 poolIndex = d.cmds[0][1] #update state variable
             if nearLOD == d.near and farLOD == d.far:
